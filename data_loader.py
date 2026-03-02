@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 import os
 
 
+
+
 def load_images_from_folder(folder_path):
     images = []
     labels = []
@@ -12,34 +14,31 @@ def load_images_from_folder(folder_path):
 
     for digit in range(10):
         digit_path = os.path.join(folder_path, str(digit))
-        for filename in os.listdir(digit_path):
-            if not filename.endswith(".jpg"):
-                continue
-            #Read the image => return a numpy array as RGB Matrix (3D Array)
+        files = [f for f in os.listdir(digit_path) if f.endswith(".jpg")]
+        print("first file:", files[0])
+        print("shape:", plt.imread(os.path.join(digit_path, files[0])).shape)
+        for filename in files:
             img = plt.imread(os.path.join(digit_path, filename))
-            #Matrix => Vector (1D np array), Normalize the RGB values between 0-255 => to 0-1
             img = img.flatten() / 255.0
-            #Add the vector to the array (images) with index (digit)
             images.append(img)
             labels.append(digit)
     return np.array(images), np.array(labels)
 
-# return vector of length num_classes with 1 at the index of the number label
+# Return vector of length num_classes with 1 at the index of the number label
 def one_hot_encode(labels, num_classes=10):
+    # create matrix of length labels with num_classes columns, all values are 0
     one_hot = np.zeros((len(labels), num_classes))
-    print(one_hot)
+    # set the value at the index of the label to 1
     one_hot[np.arange(len(labels)), labels] = 1.0
     print(one_hot.shape)
 
     return one_hot
-matrix =one_hot_encode(np.array([0,0,0,0]), 10)
-print(matrix)
-
 
 
 
 def shuffle_data(X, y):
     indices = np.random.permutation(len(X))
+    print(indices)
     return X[indices], y[indices]
 
 def load_data(base_path="data/Reduced_MNIST_Data"):
@@ -59,7 +58,4 @@ def load_data(base_path="data/Reduced_MNIST_Data"):
 
 
 
-""" 
 data = load_data()
-print(data)
-"""
