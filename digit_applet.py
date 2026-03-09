@@ -14,6 +14,10 @@ AUTO_PREDICT_DEBOUNCE_MS = 220
 BUFFER_STROKE_STEP = 3
 GRAPH_WIDTH = 360
 GRAPH_HEIGHT = 170
+TREND_WIDTH = 360
+TREND_HEIGHT = 95
+PREVIEW_SCALE = 4
+HISTORY_LENGTH = 40
 
 
 class DigitApplet:
@@ -34,6 +38,13 @@ class DigitApplet:
         self.snap_to_grid_var = tk.BooleanVar(value=True)
         self.prediction_var = tk.StringVar(value="Prediction: -")
         self.status_var = tk.StringVar(value="Draw a digit, then click Predict.")
+        self.confidence_var = tk.StringVar(value="Top confidence: -")
+        self.margin_var = tk.StringVar(value="Top-2 margin: -")
+        self.certainty_var = tk.StringVar(value="Certainty score: -")
+
+        self.last_processed = np.zeros((MODEL_SIZE, MODEL_SIZE), dtype=np.float32)
+        self.recent_confidences: list[float] = []
+        self.recent_margins: list[float] = []
 
         self._build_ui()
         # Bring the window to front on launch.
@@ -120,8 +131,56 @@ class DigitApplet:
         )
         self.graph_canvas.grid(row=4, column=0, sticky="w")
 
+        ttk.Label(
+            right, text="Input + confidence diagnostics", font=("Helvetica", 11, "bold")
+        ).grid(row=5, column=0, sticky="w", pady=(10, 4))
+
+        diagnostics = ttk.Frame(right)
+        diagnostics.grid(row=6, column=0, sticky="w")
+
+        left_diag = ttk.Frame(diagnostics)
+        left_diag.grid(row=0, column=0, sticky="nw", padx=(0, 14))
+        right_diag = ttk.Frame(diagnostics)
+        right_diag.grid(row=0, column=1, sticky="nw")
+
+        ttk.Label(left_diag, text="Processed 28x28 preview").grid(row=0, column=0, sticky="w")
+        self.preview_canvas = tk.Canvas(
+            left_diag,
+            width=MODEL_SIZE * PREVIEW_SCALE,
+            height=MODEL_SIZE * PREVIEW_SCALE,
+            bg="#101010",
+            highlightthickness=1,
+            highlightbackground="#c9c9c9",
+        )
+        self.preview_canvas.grid(row=1, column=0, pady=(4, 0))
+
+        ttk.Label(right_diag, textvariable=self.confidence_var).grid(row=0, column=0, sticky="w")
+        self.confidence_bar = ttk.Progressbar(right_diag, orient="horizontal", length=190, maximum=1.0)
+        self.confidence_bar.grid(row=1, column=0, sticky="w", pady=(2, 6))
+
+        ttk.Label(right_diag, textvariable=self.margin_var).grid(row=2, column=0, sticky="w")
+        self.margin_bar = ttk.Progressbar(right_diag, orient="horizontal", length=190, maximum=1.0)
+        self.margin_bar.grid(row=3, column=0, sticky="w", pady=(2, 6))
+
+        ttk.Label(right_diag, textvariable=self.certainty_var).grid(row=4, column=0, sticky="w")
+        self.certainty_bar = ttk.Progressbar(right_diag, orient="horizontal", length=190, maximum=1.0)
+        self.certainty_bar.grid(row=5, column=0, sticky="w", pady=(2, 0))
+
+        ttk.Label(
+            right, text="Confidence trend (recent predictions)", font=("Helvetica", 10, "bold")
+        ).grid(row=7, column=0, sticky="w", pady=(10, 3))
+        self.trend_canvas = tk.Canvas(
+            right,
+            width=TREND_WIDTH,
+            height=TREND_HEIGHT,
+            bg="#f3f3f3",
+            highlightthickness=1,
+            highlightbackground="#c9c9c9",
+        )
+        self.trend_canvas.grid(row=8, column=0, sticky="w")
+
         controls = ttk.Frame(right)
-        controls.grid(row=5, column=0, sticky="w", pady=(10, 0))
+        controls.grid(row=9, column=0, sticky="w", pady=(10, 0))
 
         ttk.Button(controls, text="Predict", command=self.predict).grid(row=0, column=0, padx=(0, 8))
         ttk.Button(controls, text="Clear", command=self.clear).grid(row=0, column=1, padx=(0, 8))
@@ -137,10 +196,12 @@ class DigitApplet:
             variable=self.snap_to_grid_var,
         ).grid(row=0, column=3, padx=(12, 0), sticky="w")
 
-        ttk.Label(right, textvariable=self.status_var).grid(row=6, column=0, sticky="w", pady=(8, 0))
+        ttk.Label(right, textvariable=self.status_var).grid(row=10, column=0, sticky="w", pady=(8, 0))
 
         self._redraw_grid()
         self._draw_probability_graph(np.zeros(10, dtype=np.float32))
+        self._draw_processed_preview(self.last_processed)
+        self._draw_trend_graph()
 
     def _redraw_grid(self) -> None:
         self.canvas.delete("grid")
@@ -184,6 +245,103 @@ class DigitApplet:
                 fill="#333333",
                 font=("Helvetica", 9),
             )
+
+    def _draw_processed_preview(self, img28: np.ndarray) -> None:
+        self.preview_canvas.delete("all")
+        for y in range(MODEL_SIZE):
+            for x in range(MODEL_SIZE):
+                v = float(np.clip(img28[y, x], 0.0, 1.0))
+                gray = int(v * 255)
+                color = f"#{gray:02x}{gray:02x}{gray:02x}"
+                x0 = x * PREVIEW_SCALE
+                y0 = y * PREVIEW_SCALE
+                self.preview_canvas.create_rectangle(
+                    x0,
+                    y0,
+                    x0 + PREVIEW_SCALE,
+                    y0 + PREVIEW_SCALE,
+                    fill=color,
+                    outline="",
+                )
+        self.preview_canvas.create_rectangle(
+            0,
+            0,
+            MODEL_SIZE * PREVIEW_SCALE,
+            MODEL_SIZE * PREVIEW_SCALE,
+            outline="#6c6c6c",
+        )
+
+    def _update_confidence_metrics(self, probs: np.ndarray) -> None:
+        sorted_probs = np.sort(probs)[::-1]
+        top1 = float(sorted_probs[0])
+        top2 = float(sorted_probs[1]) if sorted_probs.size > 1 else 0.0
+        margin = max(0.0, top1 - top2)
+        entropy = -float(np.sum(probs * np.log(np.clip(probs, 1e-12, 1.0))))
+        entropy_norm = entropy / np.log(10.0)
+        certainty = float(np.clip(1.0 - entropy_norm, 0.0, 1.0))
+
+        self.confidence_var.set(f"Top confidence: {top1 * 100:.1f}%")
+        self.margin_var.set(f"Top-2 margin: {margin * 100:.1f}%")
+        self.certainty_var.set(f"Certainty score: {certainty * 100:.1f}%")
+        self.confidence_bar["value"] = top1
+        self.margin_bar["value"] = margin
+        self.certainty_bar["value"] = certainty
+
+        self.recent_confidences.append(top1)
+        self.recent_margins.append(margin)
+        self.recent_confidences = self.recent_confidences[-HISTORY_LENGTH:]
+        self.recent_margins = self.recent_margins[-HISTORY_LENGTH:]
+        self._draw_trend_graph()
+
+    def _draw_trend_graph(self) -> None:
+        self.trend_canvas.delete("all")
+        w = TREND_WIDTH
+        h = TREND_HEIGHT
+        left, right = 10, w - 10
+        top, bottom = 10, h - 18
+
+        self.trend_canvas.create_line(left, bottom, right, bottom, fill="#9a9a9a")
+        self.trend_canvas.create_line(left, top, left, bottom, fill="#9a9a9a")
+
+        if not self.recent_confidences:
+            self.trend_canvas.create_text(
+                w / 2,
+                h / 2,
+                text="No predictions yet",
+                fill="#777777",
+                font=("Helvetica", 10),
+            )
+            return
+
+        def _points(values: list[float]) -> list[float]:
+            n = len(values)
+            points: list[float] = []
+            for i, v in enumerate(values):
+                x = left + (i / max(n - 1, 1)) * (right - left)
+                y = bottom - float(np.clip(v, 0.0, 1.0)) * (bottom - top)
+                points.extend([x, y])
+            return points
+
+        conf_pts = _points(self.recent_confidences)
+        margin_pts = _points(self.recent_margins)
+        if len(conf_pts) >= 4:
+            self.trend_canvas.create_line(*margin_pts, fill="#9cc8ff", width=2, smooth=True)
+            self.trend_canvas.create_line(*conf_pts, fill="#1f8cff", width=2, smooth=True)
+
+        self.trend_canvas.create_text(
+            right - 42,
+            top + 8,
+            text="conf",
+            fill="#1f8cff",
+            font=("Helvetica", 9, "bold"),
+        )
+        self.trend_canvas.create_text(
+            right - 42,
+            top + 22,
+            text="margin",
+            fill="#6faef6",
+            font=("Helvetica", 9),
+        )
 
     def on_press(self, event: tk.Event) -> None:
         self.last_x = int(event.x)
@@ -292,7 +450,58 @@ class DigitApplet:
                 DOWNSAMPLE_FACTOR,
             ).mean(axis=(1, 3))
         ).astype(np.float32)
-        return small.reshape(1, MODEL_SIZE * MODEL_SIZE)
+        processed = self._mnist_style_preprocess(small)
+        self.last_processed = processed
+        return processed.reshape(1, MODEL_SIZE * MODEL_SIZE)
+
+    def _mnist_style_preprocess(self, img28: np.ndarray) -> np.ndarray:
+        img = img28.copy().astype(np.float32)
+        if float(img.max()) <= 1e-6:
+            return img
+
+        img /= float(img.max())
+        mask = img > 0.05
+        if not np.any(mask):
+            return img
+
+        ys, xs = np.where(mask)
+        y0, y1 = ys.min(), ys.max() + 1
+        x0, x1 = xs.min(), xs.max() + 1
+        crop = img[y0:y1, x0:x1]
+
+        h, w = crop.shape
+        target = 20
+        scale = min(target / max(h, 1), target / max(w, 1))
+        new_h = max(1, int(round(h * scale)))
+        new_w = max(1, int(round(w * scale)))
+
+        yy = np.linspace(0, h - 1, new_h).astype(np.int32)
+        xx = np.linspace(0, w - 1, new_w).astype(np.int32)
+        resized = crop[yy][:, xx]
+
+        canvas = np.zeros((MODEL_SIZE, MODEL_SIZE), dtype=np.float32)
+        py = (MODEL_SIZE - new_h) // 2
+        px = (MODEL_SIZE - new_w) // 2
+        canvas[py : py + new_h, px : px + new_w] = resized
+
+        mass = float(canvas.sum())
+        if mass > 1e-6:
+            ys2, xs2 = np.indices(canvas.shape, dtype=np.float32)
+            cy = float((ys2 * canvas).sum() / mass)
+            cx = float((xs2 * canvas).sum() / mass)
+            shift_y = int(round((MODEL_SIZE - 1) / 2 - cy))
+            shift_x = int(round((MODEL_SIZE - 1) / 2 - cx))
+            canvas = np.roll(canvas, shift=(shift_y, shift_x), axis=(0, 1))
+            if shift_y > 0:
+                canvas[:shift_y, :] = 0.0
+            elif shift_y < 0:
+                canvas[shift_y:, :] = 0.0
+            if shift_x > 0:
+                canvas[:, :shift_x] = 0.0
+            elif shift_x < 0:
+                canvas[:, shift_x:] = 0.0
+
+        return np.clip(canvas, 0.0, 1.0)
 
     def predict(self) -> None:
         self.auto_predict_job = None
@@ -310,6 +519,8 @@ class DigitApplet:
             self.top_bars[rank]["value"] = p
 
         self._draw_probability_graph(probs)
+        self._draw_processed_preview(self.last_processed)
+        self._update_confidence_metrics(probs)
         self.status_var.set("Prediction updated.")
 
     def clear(self) -> None:
@@ -320,6 +531,17 @@ class DigitApplet:
             self.top_labels[rank].configure(text=f"#{rank + 1}: -")
             self.top_bars[rank]["value"] = 0.0
         self._draw_probability_graph(np.zeros(10, dtype=np.float32))
+        self.last_processed = np.zeros((MODEL_SIZE, MODEL_SIZE), dtype=np.float32)
+        self.recent_confidences.clear()
+        self.recent_margins.clear()
+        self._draw_processed_preview(self.last_processed)
+        self._draw_trend_graph()
+        self.confidence_var.set("Top confidence: -")
+        self.margin_var.set("Top-2 margin: -")
+        self.certainty_var.set("Certainty score: -")
+        self.confidence_bar["value"] = 0.0
+        self.margin_bar["value"] = 0.0
+        self.certainty_bar["value"] = 0.0
         self.status_var.set("Canvas cleared.")
         self._redraw_grid()
 
