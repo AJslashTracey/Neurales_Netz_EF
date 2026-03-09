@@ -11,11 +11,13 @@ class NeuralNetwork:
         output_dim: int = 10,
         learning_rate: float = 0.01,
         grad_clip_value: float = 5.0,
+        weight_decay: float = 1e-4,
         seed: int = 42,
     ) -> None:
         np.random.seed(seed)
         self.learning_rate = learning_rate
         self.grad_clip_value = grad_clip_value
+        self.weight_decay = weight_decay
         dims = (input_dim, *hidden_dims, output_dim)
 
         self.weights: list[np.ndarray] = []
@@ -50,10 +52,14 @@ class NeuralNetwork:
 
         return y_pred, activations, zs
 
-    @staticmethod
-    def compute_loss(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+    def compute_loss(self, y_true: np.ndarray, y_pred: np.ndarray) -> float:
         y_pred = np.clip(y_pred, 1e-12, 1.0)
-        return -np.mean(np.sum(y_true * np.log(y_pred), axis=1))
+        ce_loss = -np.mean(np.sum(y_true * np.log(y_pred), axis=1))
+        if self.weight_decay <= 0.0:
+            return ce_loss
+
+        l2 = sum(float(np.sum(w * w)) for w in self.weights)
+        return ce_loss + 0.5 * self.weight_decay * l2
 
     def backward(
         self, y_true: np.ndarray, activations: list[np.ndarray], zs: list[np.ndarray]
@@ -73,6 +79,10 @@ class NeuralNetwork:
                 dz = (dz @ self.weights[layer_idx + 1].T) * relu_derivative(zs[layer_idx])
                 grad_w[layer_idx] = (activations[layer_idx].T @ dz) / m
             grad_b[layer_idx] = np.sum(dz, axis=0, keepdims=True) / m
+
+        if self.weight_decay > 0.0:
+            for idx in range(len(grad_w)):
+                grad_w[idx] += self.weight_decay * self.weights[idx]
 
         return grad_w, grad_b
 
@@ -111,6 +121,7 @@ class NeuralNetwork:
         payload: dict[str, np.ndarray] = {
             "learning_rate": np.array([self.learning_rate], dtype=np.float32),
             "grad_clip_value": np.array([self.grad_clip_value], dtype=np.float32),
+            "weight_decay": np.array([self.weight_decay], dtype=np.float32),
             "num_layers": np.array([len(self.weights)], dtype=np.int32),
         }
         for idx, (w, b) in enumerate(zip(self.weights, self.biases)):
@@ -137,6 +148,7 @@ class NeuralNetwork:
         grad_clip_value = (
             float(data["grad_clip_value"][0]) if "grad_clip_value" in data.files else 5.0
         )
+        weight_decay = float(data["weight_decay"][0]) if "weight_decay" in data.files else 1e-4
 
         model = cls(
             input_dim=dims[0],
@@ -144,7 +156,17 @@ class NeuralNetwork:
             output_dim=dims[-1],
             learning_rate=learning_rate,
             grad_clip_value=grad_clip_value,
+            weight_decay=weight_decay,
         )
         model.weights = weights
         model.biases = biases
         return model
+
+    def get_parameters_copy(self) -> tuple[list[np.ndarray], list[np.ndarray]]:
+        weights = [w.copy() for w in self.weights]
+        biases = [b.copy() for b in self.biases]
+        return weights, biases
+
+    def set_parameters(self, weights: list[np.ndarray], biases: list[np.ndarray]) -> None:
+        self.weights = [w.copy() for w in weights]
+        self.biases = [b.copy() for b in biases]

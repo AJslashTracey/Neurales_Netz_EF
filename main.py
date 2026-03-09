@@ -8,10 +8,41 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train and run a digit classifier applet.")
     parser.add_argument("--train", action="store_true", help="Train the model.")
     parser.add_argument("--app", action="store_true", help="Launch the drawing applet.")
-    parser.add_argument("--epochs", type=int, default=10, help="Training epochs.")
+    parser.add_argument("--epochs", type=int, default=80, help="Training epochs.")
     parser.add_argument("--batch-size", type=int, default=64, help="Mini-batch size.")
     parser.add_argument("--learning-rate", type=float, default=0.005, help="Learning rate.")
     parser.add_argument("--model-path", type=str, default="model.npz", help="Model file path.")
+    parser.add_argument(
+        "--hidden-dims",
+        type=str,
+        default="256,128,64",
+        help="Comma-separated hidden layer sizes, e.g. 256,128,64",
+    )
+    parser.add_argument("--weight-decay", type=float, default=1e-4, help="L2 regularization.")
+    parser.add_argument("--val-split", type=float, default=0.1, help="Validation split ratio.")
+    parser.add_argument(
+        "--lr-decay-step",
+        type=int,
+        default=20,
+        help="Decay learning rate every N epochs (0 to disable).",
+    )
+    parser.add_argument(
+        "--lr-decay-factor",
+        type=float,
+        default=0.5,
+        help="Factor applied at each LR decay step.",
+    )
+    parser.add_argument(
+        "--patience",
+        type=int,
+        default=12,
+        help="Early stopping patience in epochs.",
+    )
+    parser.add_argument(
+        "--no-augment",
+        action="store_true",
+        help="Disable data augmentation during training.",
+    )
     parser.add_argument(
         "--debug-app",
         action="store_true",
@@ -24,6 +55,7 @@ def main() -> None:
     args = parse_args()
     should_train = args.train or (not args.train and not args.app)
     model: NeuralNetwork | None = None
+    hidden_dims = tuple(int(x.strip()) for x in args.hidden_dims.split(",") if x.strip())
 
     if should_train:
         from data_loader import load_data
@@ -37,9 +69,10 @@ def main() -> None:
 
         model = NeuralNetwork(
             input_dim=X_train.shape[1],
-            hidden_dims=(128, 64),
+            hidden_dims=hidden_dims,
             output_dim=y_train.shape[1],
             learning_rate=args.learning_rate,
+            weight_decay=args.weight_decay,
             seed=42,
         )
 
@@ -51,6 +84,11 @@ def main() -> None:
             y_test=y_test,
             epochs=args.epochs,
             batch_size=args.batch_size,
+            val_split=args.val_split,
+            use_augmentation=not args.no_augment,
+            lr_decay_step=args.lr_decay_step,
+            lr_decay_factor=args.lr_decay_factor,
+            early_stopping_patience=args.patience,
         )
         model.save_model(args.model_path)
         print(f"Saved model to: {args.model_path}")
