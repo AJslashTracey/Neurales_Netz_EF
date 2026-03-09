@@ -106,3 +106,45 @@ class NeuralNetwork:
 
     def predict(self, X: np.ndarray) -> np.ndarray:
         return np.argmax(self.predict_proba(X), axis=1)
+
+    def save_model(self, path: str) -> None:
+        payload: dict[str, np.ndarray] = {
+            "learning_rate": np.array([self.learning_rate], dtype=np.float32),
+            "grad_clip_value": np.array([self.grad_clip_value], dtype=np.float32),
+            "num_layers": np.array([len(self.weights)], dtype=np.int32),
+        }
+        for idx, (w, b) in enumerate(zip(self.weights, self.biases)):
+            payload[f"w_{idx}"] = w.astype(np.float32)
+            payload[f"b_{idx}"] = b.astype(np.float32)
+        np.savez(path, **payload)
+
+    @classmethod
+    def load_model(cls, path: str) -> "NeuralNetwork":
+        data = np.load(path)
+        num_layers = int(data["num_layers"][0])
+
+        weights: list[np.ndarray] = []
+        biases: list[np.ndarray] = []
+        for idx in range(num_layers):
+            weights.append(data[f"w_{idx}"].astype(np.float32))
+            biases.append(data[f"b_{idx}"].astype(np.float32))
+
+        dims = [weights[0].shape[0]]
+        for w in weights:
+            dims.append(w.shape[1])
+
+        learning_rate = float(data["learning_rate"][0]) if "learning_rate" in data.files else 0.01
+        grad_clip_value = (
+            float(data["grad_clip_value"][0]) if "grad_clip_value" in data.files else 5.0
+        )
+
+        model = cls(
+            input_dim=dims[0],
+            hidden_dims=tuple(dims[1:-1]),
+            output_dim=dims[-1],
+            learning_rate=learning_rate,
+            grad_clip_value=grad_clip_value,
+        )
+        model.weights = weights
+        model.biases = biases
+        return model
