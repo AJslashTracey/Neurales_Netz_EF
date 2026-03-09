@@ -13,10 +13,12 @@ class NeuralNetwork:
 
         self.W3 = np.random.randn(hidden2_size, output_size).astype(np.float64) * np.sqrt(2.0 / hidden2_size)
         self.b3 = np.zeros((1, output_size), dtype=np.float64)
+        self.grad_clip_norm = 5.0
+        self.weight_clip_value = 10.0
 
     def forward(self, X):
         self.X = X
-        with np.errstate(divide="ignore", invalid="ignore"):
+        with np.errstate(over="ignore", divide="ignore", invalid="ignore"):
             self.z1 = X @ self.W1 + self.b1
             self.a1 = relu(self.z1)
 
@@ -24,6 +26,11 @@ class NeuralNetwork:
             self.a2 = relu(self.z2)
 
             self.z3 = self.a2 @ self.W3 + self.b3
+
+        np.nan_to_num(self.z1, copy=False, nan=0.0, posinf=1e6, neginf=-1e6)
+        np.nan_to_num(self.z2, copy=False, nan=0.0, posinf=1e6, neginf=-1e6)
+        np.nan_to_num(self.z3, copy=False, nan=0.0, posinf=1e6, neginf=-1e6)
+        np.clip(self.z3, -50.0, 50.0, out=self.z3)
         self.y_hat = softmax(self.z3)
         return self.y_hat
 
@@ -35,7 +42,7 @@ class NeuralNetwork:
     def backward(self, y_true):
         batch_size = y_true.shape[0]
 
-        with np.errstate(divide="ignore", invalid="ignore"):
+        with np.errstate(over="ignore", divide="ignore", invalid="ignore"):
             dz3 = (self.y_hat - y_true) / batch_size
             self.dW3 = self.a2.T @ dz3
             self.db3 = np.sum(dz3, axis=0, keepdims=True)
@@ -50,6 +57,8 @@ class NeuralNetwork:
             self.dW1 = self.X.T @ dz1
             self.db1 = np.sum(dz1, axis=0, keepdims=True)
 
+        self._sanitize_and_clip_gradients()
+
     def update_params(self, learning_rate):
         self.W1 -= learning_rate * self.dW1
         self.b1 -= learning_rate * self.db1
@@ -57,9 +66,27 @@ class NeuralNetwork:
         self.b2 -= learning_rate * self.db2
         self.W3 -= learning_rate * self.dW3
         self.b3 -= learning_rate * self.db3
+        self._sanitize_and_clip_weights()
 
     def predict_proba(self, X):
         return self.forward(X)
 
     def predict(self, X):
         return np.argmax(self.predict_proba(X), axis=1)
+
+    def _sanitize_and_clip_gradients(self):
+        grads = [self.dW1, self.db1, self.dW2, self.db2, self.dW3, self.db3]
+        for grad in grads:
+            np.nan_to_num(grad, copy=False, nan=0.0, posinf=1.0, neginf=-1.0)
+
+        global_norm = np.sqrt(sum(np.sum(g * g) for g in grads))
+        if global_norm > self.grad_clip_norm:
+            scale = self.grad_clip_norm / (global_norm + 1e-12)
+            for grad in grads:
+                grad *= scale
+
+    def _sanitize_and_clip_weights(self):
+        params = [self.W1, self.b1, self.W2, self.b2, self.W3, self.b3]
+        for param in params:
+            np.nan_to_num(param, copy=False, nan=0.0, posinf=self.weight_clip_value, neginf=-self.weight_clip_value)
+            np.clip(param, -self.weight_clip_value, self.weight_clip_value, out=param)
