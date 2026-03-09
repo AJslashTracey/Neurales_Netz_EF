@@ -1,61 +1,50 @@
-"""jurivx© GPLv3 23.02.2026"""
-
-import numpy as np
-import matplotlib.pyplot as plt
 import os
 
+import matplotlib.pyplot as plt
+import numpy as np
 
 
-
-def load_images_from_folder(folder_path):
-    images = []
-    labels = []
-    
+def load_images_from_folder(folder_path: str) -> tuple[np.ndarray, np.ndarray]:
+    images: list[np.ndarray] = []
+    labels: list[int] = []
 
     for digit in range(10):
         digit_path = os.path.join(folder_path, str(digit))
-        files = [f for f in os.listdir(digit_path) if f.endswith(".jpg")]
-        print("first file:", files[0])
-        print("shape:", plt.imread(os.path.join(digit_path, files[0])).shape)
+        files = sorted(f for f in os.listdir(digit_path) if f.endswith(".jpg"))
         for filename in files:
             img = plt.imread(os.path.join(digit_path, filename))
-            img = img.flatten() / 255.0
+            img = img.astype(np.float32).flatten() / 255.0
             images.append(img)
             labels.append(digit)
-    return np.array(images), np.array(labels)
 
-# Return vector of length num_classes with 1 at the index of the number label
-def one_hot_encode(labels, num_classes=10):
-    # create matrix of length labels with num_classes columns, all values are 0
-    one_hot = np.zeros((len(labels), num_classes))
-    # set the value at the index of the label to 1
+    return np.array(images, dtype=np.float32), np.array(labels, dtype=np.int64)
+
+
+def one_hot_encode(labels: np.ndarray, num_classes: int = 10) -> np.ndarray:
+    one_hot = np.zeros((len(labels), num_classes), dtype=np.float32)
     one_hot[np.arange(len(labels)), labels] = 1.0
-    print(one_hot.shape)
-
     return one_hot
 
 
-
-def shuffle_data(X, y):
+def shuffle_data(X: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     indices = np.random.permutation(len(X))
-    print(indices)
     return X[indices], y[indices]
 
-def load_data(base_path="data/Reduced_MNIST_Data"):
+
+def load_data(base_path: str = "data/Reduced_MNIST_Data") -> tuple[np.ndarray, ...]:
     X_train, y_train = load_images_from_folder(
         os.path.join(base_path, "Reduced_Trainging_data")
     )
-    X_test, y_test = load_images_from_folder(
-        os.path.join(base_path, "Reduced_Testing_data")
-    )
+    X_test, y_test = load_images_from_folder(os.path.join(base_path, "Reduced_Testing_data"))
 
     y_train = one_hot_encode(y_train)
     y_test = one_hot_encode(y_test)
-
     X_train, y_train = shuffle_data(X_train, y_train)
 
+    # Basic shape checks make data errors fail early.
+    assert X_train.ndim == 2 and X_test.ndim == 2
+    assert y_train.ndim == 2 and y_test.ndim == 2
+    assert X_train.shape[1] == X_test.shape[1]
+    assert y_train.shape[1] == 10 and y_test.shape[1] == 10
+
     return X_train, y_train, X_test, y_test
-
-
-
-data = load_data()
