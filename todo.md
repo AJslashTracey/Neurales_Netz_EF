@@ -1,0 +1,2 @@
+- Create some kind of graph at how good the Model is compared to how good it can actually be based on the dataset
+- chose between different models where you can see how much of the potential of the model has been actually used
