@@ -3,12 +3,49 @@ import numpy as np
 from network import NeuralNetwork
 
 IMAGE_SIZE = 28
+NUM_CLASSES = 10
+DEFAULT_LABEL_NOISE_ESTIMATE = 0.02
 
 
 def accuracy(y_true_one_hot: np.ndarray, y_pred_proba: np.ndarray) -> float:
     y_true = np.argmax(y_true_one_hot, axis=1)
     y_pred = np.argmax(y_pred_proba, axis=1)
     return float(np.mean(y_true == y_pred))
+
+
+def _confusion_matrix(y_true_one_hot: np.ndarray, y_pred_proba: np.ndarray) -> np.ndarray:
+    y_true = np.argmax(y_true_one_hot, axis=1)
+    y_pred = np.argmax(y_pred_proba, axis=1)
+    matrix = np.zeros((NUM_CLASSES, NUM_CLASSES), dtype=np.float32)
+    np.add.at(matrix, (y_true, y_pred), 1.0)
+    return matrix
+
+
+def _normalize_confusion(matrix: np.ndarray) -> np.ndarray:
+    row_sum = matrix.sum(axis=1, keepdims=True)
+    row_sum = np.maximum(row_sum, 1e-8)
+    return matrix / row_sum
+
+
+def _per_class_accuracy(matrix: np.ndarray) -> np.ndarray:
+    row_sum = np.maximum(matrix.sum(axis=1), 1e-8)
+    return np.diag(matrix) / row_sum
+
+
+def _class_counts(y_one_hot: np.ndarray) -> np.ndarray:
+    return y_one_hot.sum(axis=0).astype(np.float32)
+
+
+def _estimate_label_noise(
+    y_true_one_hot: np.ndarray,
+    y_pred_proba: np.ndarray,
+    fallback: float = DEFAULT_LABEL_NOISE_ESTIMATE,
+) -> float:
+    y_true = np.argmax(y_true_one_hot, axis=1)
+    true_class_prob = y_pred_proba[np.arange(len(y_true)), y_true]
+    suspect_ratio = float(np.mean(true_class_prob < 0.2))
+    estimate = max(fallback, suspect_ratio * 0.5)
+    return float(np.clip(estimate, 0.0, 0.2))
 
 
 def iterate_minibatches(
@@ -84,7 +121,7 @@ def train_model(
     lr_decay_step: int = 20,
     lr_decay_factor: float = 0.5,
     early_stopping_patience: int = 12,
-) -> dict[str, list[float]]:
+) -> dict[str, list[float] | list[np.ndarray] | np.ndarray | float]:
     X_core, y_core, X_val, y_val = split_train_validation(X_train, y_train, val_split)
 
     history: dict[str, list[float]] = {
@@ -94,6 +131,8 @@ def train_model(
         "val_acc": [],
         "test_acc": [],
         "learning_rate": [],
+        "test_confusion_norm": [],
+        "test_per_class_acc": [],
     }
     best_val_acc = -1.0
     best_epoch = 0
@@ -125,6 +164,9 @@ def train_model(
         train_acc = accuracy(y_core, train_pred)
         val_acc = accuracy(y_val, val_pred)
         test_acc = accuracy(y_test, test_pred)
+        test_conf = _confusion_matrix(y_test, test_pred)
+        test_conf_norm = _normalize_confusion(test_conf)
+        test_per_class_acc = _per_class_accuracy(test_conf)
 
         history["train_loss"].append(avg_loss)
         history["train_acc"].append(train_acc)
@@ -132,6 +174,8 @@ def train_model(
         history["val_acc"].append(val_acc)
         history["test_acc"].append(test_acc)
         history["learning_rate"].append(model.learning_rate)
+        history["test_confusion_norm"].append(test_conf_norm)
+        history["test_per_class_acc"].append(test_per_class_acc)
 
         print(
             f"Epoch {epoch:02d}/{epochs} | "
@@ -155,5 +199,27 @@ def train_model(
                 break
 
     model.set_parameters(*best_params)
-    print(f"Restored best model from epoch {best_epoch} with val_acc={best_val_acc:.4f}.")
+    train_pred_final = model.predict_proba(X_train)
+    test_pred_final = model.predict_proba(X_test)
+    final_test_acc = accuracy(y_test, test_pred_final)
+    label_noise_estimate = _estimate_label_noise(y_train, train_pred_final)
+    dataset_ceiling = float(np.clip(1.0 - label_noise_estimate, 0.0, 1.0))
+
+    history["train_class_counts"] = _class_counts(y_train)
+    history["test_class_counts"] = _class_counts(y_test)
+    history["label_noise_estimate"] = label_noise_estimate
+    history["dataset_ceiling"] = dataset_ceiling
+    history["augmentation_flag"] = 1.0 if use_augmentation else 0.0
+    history["architecture_depth"] = float(len(model.weights))
+    history["parameter_count"] = float(
+        sum(int(w.size + b.size) for w, b in zip(model.weights, model.biases))
+    )
+    history["best_epoch"] = float(best_epoch)
+    history["best_val_acc"] = float(best_val_acc)
+    history["final_test_acc"] = float(final_test_acc)
+
+    print(
+        f"Restored best model from epoch {best_epoch} with val_acc={best_val_acc:.4f}. "
+        f"Estimated label noise={label_noise_estimate:.3f}, dataset ceiling~{dataset_ceiling:.3f}."
+    )
     return history

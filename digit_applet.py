@@ -16,14 +16,25 @@ GRAPH_WIDTH = 360
 GRAPH_HEIGHT = 170
 TREND_WIDTH = 360
 TREND_HEIGHT = 95
+QUALITY_WIDTH = 360
+LEARNING_HEIGHT = 150
+CONFUSION_HEIGHT = 250
+SIGNAL_HEIGHT = 170
+SPARKLINE_HEIGHT = 66
 PREVIEW_SCALE = 4
 HISTORY_LENGTH = 40
 
 
 class DigitApplet:
-    def __init__(self, model: NeuralNetwork, debug: bool = False) -> None:
+    def __init__(
+        self,
+        model: NeuralNetwork,
+        debug: bool = False,
+        training_dashboard: dict[str, np.ndarray] | None = None,
+    ) -> None:
         self.model = model
         self.debug = debug
+        self.training_dashboard = training_dashboard or {}
         self.root = tk.Tk()
         self.root.title("Digit Predictor")
         self.root.resizable(False, False)
@@ -41,10 +52,30 @@ class DigitApplet:
         self.confidence_var = tk.StringVar(value="Top confidence: -")
         self.margin_var = tk.StringVar(value="Top-2 margin: -")
         self.certainty_var = tk.StringVar(value="Certainty score: -")
+        self.quality_summary_var = tk.StringVar(value="Model quality vs dataset quality: unavailable")
+        self.ceiling_progress_var = tk.StringVar(value="Benchmark progress: unavailable")
+        self.dataset_quality_var = tk.StringVar(value="Dataset quality: unavailable")
+        self.limits_var = tk.StringVar(value="Likely bottlenecks: dataset metrics unavailable")
 
         self.last_processed = np.zeros((MODEL_SIZE, MODEL_SIZE), dtype=np.float32)
         self.recent_confidences: list[float] = []
         self.recent_margins: list[float] = []
+        self.train_loss_hist = self._metric_series("train_loss")
+        self.val_loss_hist = self._metric_series("val_loss")
+        self.train_acc_hist = self._metric_series("train_acc")
+        self.val_acc_hist = self._metric_series("val_acc")
+        self.test_acc_hist = self._metric_series("test_acc")
+        self.confusion_hist = self._metric_matrix_series("test_confusion_norm", rows=10, cols=10)
+        self.per_class_acc_hist = self._metric_matrix_series("test_per_class_acc", rows=1, cols=10)
+        self.train_class_counts = self._metric_series("train_class_counts", size=10)
+        self.test_class_counts = self._metric_series("test_class_counts", size=10)
+        self.label_noise_estimate = self._metric_scalar("label_noise_estimate", default=0.02)
+        self.dataset_ceiling = self._metric_scalar(
+            "dataset_ceiling", default=max(0.0, 1.0 - self.label_noise_estimate)
+        )
+        self.augmentation_enabled = self._metric_scalar("augmentation_flag", default=1.0) >= 0.5
+        self.architecture_depth = int(round(self._metric_scalar("architecture_depth", default=0.0)))
+        self.parameter_count = int(round(self._metric_scalar("parameter_count", default=0.0)))
 
         self._build_ui()
         # Bring the window to front on launch.
@@ -58,6 +89,41 @@ class DigitApplet:
 
         if self.debug:
             print("Tk window created and focused.", flush=True)
+
+    def _metric_series(self, key: str, size: int | None = None) -> np.ndarray:
+        value = self.training_dashboard.get(key)
+        if value is None:
+            return np.zeros((0,), dtype=np.float32) if size is None else np.zeros((size,), dtype=np.float32)
+        arr = np.asarray(value, dtype=np.float32).reshape(-1)
+        if size is not None:
+            if arr.size < size:
+                out = np.zeros((size,), dtype=np.float32)
+                out[: arr.size] = arr
+                return out
+            return arr[:size]
+        return arr
+
+    def _metric_matrix_series(self, key: str, rows: int, cols: int) -> np.ndarray:
+        value = self.training_dashboard.get(key)
+        if value is None:
+            return np.zeros((0, rows, cols), dtype=np.float32)
+        arr = np.asarray(value, dtype=np.float32)
+        if arr.ndim == 2 and arr.shape == (rows, cols):
+            return arr.reshape(1, rows, cols)
+        if arr.ndim == 3 and arr.shape[1:] == (rows, cols):
+            return arr
+        if arr.ndim == 2 and rows == 1 and arr.shape[1] == cols:
+            return arr.reshape(arr.shape[0], 1, cols)
+        return np.zeros((0, rows, cols), dtype=np.float32)
+
+    def _metric_scalar(self, key: str, default: float) -> float:
+        value = self.training_dashboard.get(key)
+        if value is None:
+            return default
+        arr = np.asarray(value, dtype=np.float32).reshape(-1)
+        if arr.size == 0:
+            return default
+        return float(arr[-1])
 
     def _build_ui(self) -> None:
         outer = ttk.Frame(self.root, padding=10)
@@ -198,10 +264,88 @@ class DigitApplet:
 
         ttk.Label(right, textvariable=self.status_var).grid(row=10, column=0, sticky="w", pady=(8, 0))
 
+        ttk.Label(
+            right, text="Training + dataset dashboard", font=("Helvetica", 11, "bold")
+        ).grid(row=11, column=0, sticky="w", pady=(12, 4))
+        dashboard_tabs = ttk.Notebook(right)
+        dashboard_tabs.grid(row=12, column=0, sticky="w")
+
+        curves_tab = ttk.Frame(dashboard_tabs)
+        confusion_tab = ttk.Frame(dashboard_tabs)
+        signal_tab = ttk.Frame(dashboard_tabs)
+        dashboard_tabs.add(curves_tab, text="Curves")
+        dashboard_tabs.add(confusion_tab, text="Confusion")
+        dashboard_tabs.add(signal_tab, text="Signal/Benchmark")
+
+        self.learning_canvas = tk.Canvas(
+            curves_tab,
+            width=QUALITY_WIDTH,
+            height=LEARNING_HEIGHT,
+            bg="#f7f7f7",
+            highlightthickness=1,
+            highlightbackground="#c9c9c9",
+        )
+        self.learning_canvas.grid(row=0, column=0, sticky="w")
+        self.training_sparkline_canvas = tk.Canvas(
+            curves_tab,
+            width=QUALITY_WIDTH,
+            height=SPARKLINE_HEIGHT,
+            bg="#f7f7f7",
+            highlightthickness=1,
+            highlightbackground="#c9c9c9",
+        )
+        self.training_sparkline_canvas.grid(row=1, column=0, sticky="w", pady=(6, 0))
+        ttk.Label(curves_tab, textvariable=self.quality_summary_var).grid(
+            row=2, column=0, sticky="w", pady=(6, 2)
+        )
+
+        self.confusion_canvas = tk.Canvas(
+            confusion_tab,
+            width=QUALITY_WIDTH,
+            height=CONFUSION_HEIGHT,
+            bg="#f7f7f7",
+            highlightthickness=1,
+            highlightbackground="#c9c9c9",
+        )
+        self.confusion_canvas.grid(row=0, column=0, sticky="w")
+        ttk.Label(confusion_tab, textvariable=self.dataset_quality_var, justify="left").grid(
+            row=1, column=0, sticky="w", pady=(6, 2)
+        )
+
+        self.signal_canvas = tk.Canvas(
+            signal_tab,
+            width=QUALITY_WIDTH,
+            height=SIGNAL_HEIGHT,
+            bg="#f7f7f7",
+            highlightthickness=1,
+            highlightbackground="#c9c9c9",
+        )
+        self.signal_canvas.grid(row=0, column=0, sticky="w")
+        ttk.Label(signal_tab, textvariable=self.ceiling_progress_var).grid(
+            row=1, column=0, sticky="w", pady=(6, 0)
+        )
+        ttk.Label(signal_tab, textvariable=self.limits_var, justify="left").grid(
+            row=2, column=0, sticky="w", pady=(4, 4)
+        )
+        self.compare_canvas = tk.Canvas(
+            signal_tab,
+            width=QUALITY_WIDTH,
+            height=70,
+            bg="#f7f7f7",
+            highlightthickness=1,
+            highlightbackground="#c9c9c9",
+        )
+        self.compare_canvas.grid(row=3, column=0, sticky="w")
+
         self._redraw_grid()
         self._draw_probability_graph(np.zeros(10, dtype=np.float32))
         self._draw_processed_preview(self.last_processed)
         self._draw_trend_graph()
+        self._draw_learning_curves()
+        self._draw_training_sparkline()
+        self._draw_confusion_matrix()
+        self._draw_signal_noise_chart()
+        self._draw_benchmark_panel()
 
     def _redraw_grid(self) -> None:
         self.canvas.delete("grid")
@@ -342,6 +486,233 @@ class DigitApplet:
             fill="#6faef6",
             font=("Helvetica", 9),
         )
+
+    def _draw_learning_curves(self) -> None:
+        c = self.learning_canvas
+        c.delete("all")
+        w = QUALITY_WIDTH
+        h = LEARNING_HEIGHT
+        left, right = 28, w - 10
+        top, bottom = 12, h - 24
+        c.create_line(left, bottom, right, bottom, fill="#9a9a9a")
+        c.create_line(left, top, left, bottom, fill="#9a9a9a")
+        c.create_text(7, top + 4, text="1.0", anchor="w", fill="#777777", font=("Helvetica", 8))
+        c.create_text(7, bottom - 2, text="0.0", anchor="w", fill="#777777", font=("Helvetica", 8))
+
+        n = int(
+            max(
+                self.train_loss_hist.size,
+                self.val_loss_hist.size,
+                self.train_acc_hist.size,
+                self.val_acc_hist.size,
+            )
+        )
+        if n < 2:
+            c.create_text(
+                w / 2,
+                h / 2,
+                text="No training history found (.metrics.npz missing).",
+                fill="#777777",
+                font=("Helvetica", 10),
+            )
+            return
+
+        max_loss = float(
+            max(
+                np.max(self.train_loss_hist) if self.train_loss_hist.size else 1.0,
+                np.max(self.val_loss_hist) if self.val_loss_hist.size else 1.0,
+                1e-5,
+            )
+        )
+
+        def _line(values: np.ndarray, color: str, normalize_by: float = 1.0) -> None:
+            if values.size < 2:
+                return
+            points: list[float] = []
+            for i, val in enumerate(values):
+                x = left + (i / max(values.size - 1, 1)) * (right - left)
+                y_norm = float(np.clip(val / normalize_by, 0.0, 1.0))
+                y = bottom - y_norm * (bottom - top)
+                points.extend([x, y])
+            c.create_line(*points, fill=color, width=2, smooth=True)
+
+        _line(self.train_loss_hist, "#f39a3f", normalize_by=max_loss)
+        _line(self.val_loss_hist, "#d45e2e", normalize_by=max_loss)
+        _line(self.train_acc_hist, "#51b45a")
+        _line(self.val_acc_hist, "#2a8f3c")
+
+        ceiling_y = bottom - float(np.clip(self.dataset_ceiling, 0.0, 1.0)) * (bottom - top)
+        c.create_line(left, ceiling_y, right, ceiling_y, fill="#6e66d9", width=1, dash=(4, 3))
+
+        legend = (
+            "loss(train/val): orange/red   "
+            "acc(train/val): light/dark green   "
+            "ceiling: purple dashed"
+        )
+        c.create_text(left, h - 8, anchor="w", text=legend, fill="#585858", font=("Helvetica", 8))
+
+    def _draw_training_sparkline(self) -> None:
+        c = self.training_sparkline_canvas
+        c.delete("all")
+        w = QUALITY_WIDTH
+        h = SPARKLINE_HEIGHT
+        left, right = 10, w - 10
+        top, bottom = 8, h - 14
+        c.create_line(left, bottom, right, bottom, fill="#9a9a9a")
+        if self.test_acc_hist.size < 2:
+            c.create_text(w / 2, h / 2, text="No test trend yet", fill="#777777", font=("Helvetica", 9))
+            return
+
+        pts: list[float] = []
+        for i, val in enumerate(self.test_acc_hist):
+            x = left + (i / max(self.test_acc_hist.size - 1, 1)) * (right - left)
+            y = bottom - float(np.clip(val, 0.0, 1.0)) * (bottom - top)
+            pts.extend([x, y])
+        c.create_line(*pts, fill="#1f8cff", width=2, smooth=True)
+        ceiling_y = bottom - float(np.clip(self.dataset_ceiling, 0.0, 1.0)) * (bottom - top)
+        c.create_line(left, ceiling_y, right, ceiling_y, fill="#6e66d9", width=1, dash=(3, 3))
+
+        current_test = float(self.test_acc_hist[-1])
+        self.quality_summary_var.set(
+            f"Current test acc {current_test * 100:.1f}% / Estimated dataset ceiling "
+            f"~{self.dataset_ceiling * 100:.1f}% (label noise ~{self.label_noise_estimate * 100:.1f}%)"
+        )
+
+    def _draw_confusion_matrix(self) -> None:
+        c = self.confusion_canvas
+        c.delete("all")
+        w = QUALITY_WIDTH
+        h = CONFUSION_HEIGHT
+        c.create_text(10, 10, anchor="nw", text="Normalized confusion matrix (test split)", font=("Helvetica", 10, "bold"))
+        if self.confusion_hist.shape[0] == 0:
+            c.create_text(w / 2, h / 2, text="No evaluation confusion matrix available", fill="#777777")
+            return
+
+        matrix = self.confusion_hist[-1]
+        grid_left = 34
+        grid_top = 30
+        cell = 24
+        for i in range(10):
+            c.create_text(grid_left - 14, grid_top + i * cell + cell / 2, text=str(i), fill="#555555", font=("Helvetica", 8))
+            c.create_text(grid_left + i * cell + cell / 2, grid_top - 12, text=str(i), fill="#555555", font=("Helvetica", 8))
+
+        for row in range(10):
+            for col in range(10):
+                val = float(np.clip(matrix[row, col], 0.0, 1.0))
+                shade = int(245 - val * 180)
+                color = f"#{shade:02x}{shade:02x}ff"
+                x0 = grid_left + col * cell
+                y0 = grid_top + row * cell
+                c.create_rectangle(x0, y0, x0 + cell, y0 + cell, fill=color, outline="#d4d4d4")
+                if val >= 0.08:
+                    c.create_text(
+                        x0 + cell / 2,
+                        y0 + cell / 2,
+                        text=f"{val:.2f}",
+                        fill="#1e1e1e",
+                        font=("Helvetica", 7),
+                    )
+
+        total_counts = self.train_class_counts + self.test_class_counts
+        count_min = int(np.min(total_counts)) if total_counts.size else 0
+        count_max = int(np.max(total_counts)) if total_counts.size else 0
+        balance_ratio = float(count_min / max(count_max, 1))
+        class_text = ", ".join(f"{i}:{int(v)}" for i, v in enumerate(total_counts.astype(int)))
+        self.dataset_quality_var.set(
+            f"Dataset quality: class balance ratio={balance_ratio:.3f}, "
+            f"label noise~{self.label_noise_estimate * 100:.1f}%\nClass frequencies: {class_text}"
+        )
+
+    def _draw_signal_noise_chart(self) -> None:
+        c = self.signal_canvas
+        c.delete("all")
+        w = QUALITY_WIDTH
+        h = SIGNAL_HEIGHT
+        left, right = 24, w - 20
+        top, bottom = 14, h - 24
+        c.create_line(left, bottom, right, bottom, fill="#9a9a9a")
+        c.create_line(left, top, left, bottom, fill="#9a9a9a")
+        c.create_text(4, top, text="acc", anchor="nw", fill="#4b8f35", font=("Helvetica", 8))
+        c.create_text(right - 4, top, text="count", anchor="ne", fill="#4369d7", font=("Helvetica", 8))
+
+        if self.per_class_acc_hist.shape[0] == 0:
+            c.create_text(w / 2, h / 2, text="No per-class evaluation history", fill="#777777")
+            return
+
+        acc = self.per_class_acc_hist[-1, 0]
+        counts = self.train_class_counts + self.test_class_counts
+        max_count = float(np.max(counts)) if counts.size else 1.0
+        bar_w = (right - left) / 10.0
+        line_pts: list[float] = []
+        for digit in range(10):
+            x0 = left + digit * bar_w + 2
+            x1 = left + (digit + 1) * bar_w - 2
+            y_acc = bottom - float(np.clip(acc[digit], 0.0, 1.0)) * (bottom - top)
+            c.create_rectangle(x0, y_acc, x1, bottom, fill="#58b75f", outline="")
+            count_norm = float(counts[digit] / max(max_count, 1.0)) if counts.size else 0.0
+            y_count = bottom - count_norm * (bottom - top)
+            line_pts.extend([(x0 + x1) / 2, y_count])
+            c.create_text((x0 + x1) / 2, bottom + 9, text=str(digit), fill="#444444", font=("Helvetica", 8))
+        if len(line_pts) >= 4:
+            c.create_line(*line_pts, fill="#406bd8", width=2, smooth=True)
+        c.create_text(left + 4, top + 8, text="bars: class accuracy", anchor="nw", fill="#4b8f35", font=("Helvetica", 8))
+        c.create_text(left + 4, top + 20, text="line: sample coverage", anchor="nw", fill="#406bd8", font=("Helvetica", 8))
+
+    def _draw_benchmark_panel(self) -> None:
+        self.compare_canvas.delete("all")
+        current_test = float(self.test_acc_hist[-1]) if self.test_acc_hist.size else 0.0
+        gap = max(0.0, self.dataset_ceiling - current_test)
+        self.ceiling_progress_var.set(
+            f"Benchmark progress: model {current_test * 100:.1f}% vs best-case "
+            f"{self.dataset_ceiling * 100:.1f}% (gap {gap * 100:.1f} pts)"
+        )
+        factors = [
+            f"dataset size={int(np.sum(self.train_class_counts + self.test_class_counts))}",
+            f"augmentation={'on' if self.augmentation_enabled else 'off'}",
+            f"architecture depth={self.architecture_depth} layers",
+        ]
+        if self.parameter_count > 0:
+            factors.append(f"params~{self.parameter_count}")
+        self.limits_var.set("Likely bottlenecks: " + " | ".join(factors))
+
+        c = self.compare_canvas
+        w = QUALITY_WIDTH
+        h = 70
+        left = 90
+        right = w - 12
+        y1 = 20
+        y2 = 48
+        c.create_text(10, y1, text="Model", anchor="w", font=("Helvetica", 9, "bold"))
+        c.create_text(10, y2, text="Dataset ceiling", anchor="w", font=("Helvetica", 9, "bold"))
+
+        model_x = left + current_test * (right - left)
+        ceil_x = left + self.dataset_ceiling * (right - left)
+        c.create_rectangle(left, y1 - 7, right, y1 + 7, fill="#ececec", outline="")
+        c.create_rectangle(left, y2 - 7, right, y2 + 7, fill="#ececec", outline="")
+        c.create_rectangle(left, y1 - 7, model_x, y1 + 7, fill="#1f8cff", outline="", tags=("model_bar",))
+        c.create_rectangle(left, y2 - 7, ceil_x, y2 + 7, fill="#6e66d9", outline="", tags=("ceiling_bar",))
+        c.create_text(right, y1, text=f"{current_test * 100:.1f}%", anchor="e", fill="#1f8cff", font=("Helvetica", 9, "bold"))
+        c.create_text(
+            right,
+            y2,
+            text=f"{self.dataset_ceiling * 100:.1f}%",
+            anchor="e",
+            fill="#6e66d9",
+            font=("Helvetica", 9, "bold"),
+        )
+
+        model_tip = (
+            f"Model: current test accuracy {current_test * 100:.1f}%.\n"
+            f"Coverage {int(np.sum(self.train_class_counts + self.test_class_counts))} samples across 10 classes."
+        )
+        ceiling_tip = (
+            f"Dataset ceiling assumes 1 - label_noise.\n"
+            f"label noise estimate ~{self.label_noise_estimate * 100:.1f}% -> ceiling {self.dataset_ceiling * 100:.1f}%."
+        )
+        c.tag_bind("model_bar", "<Enter>", lambda _e: self.status_var.set(model_tip))
+        c.tag_bind("ceiling_bar", "<Enter>", lambda _e: self.status_var.set(ceiling_tip))
+        c.tag_bind("model_bar", "<Leave>", lambda _e: self.status_var.set("Prediction updated."))
+        c.tag_bind("ceiling_bar", "<Leave>", lambda _e: self.status_var.set("Prediction updated."))
 
     def on_press(self, event: tk.Event) -> None:
         self.last_x = int(event.x)
@@ -546,9 +917,13 @@ class DigitApplet:
         self._redraw_grid()
 
 
-def run_applet(model: NeuralNetwork, debug: bool = False) -> None:
+def run_applet(
+    model: NeuralNetwork,
+    debug: bool = False,
+    training_dashboard: dict[str, np.ndarray] | None = None,
+) -> None:
     try:
-        app = DigitApplet(model, debug=debug)
+        app = DigitApplet(model, debug=debug, training_dashboard=training_dashboard)
         if debug:
             print("Entering Tk mainloop...", flush=True)
             print("If no window is visible: check other Spaces and Cmd+Tab.", flush=True)

@@ -1,7 +1,42 @@
 import argparse
 import os
 
+import numpy as np
+
 from network import NeuralNetwork
+
+METRICS_SUFFIX = ".metrics.npz"
+
+
+def _to_numpy_payload(
+    metrics: dict[str, list[float] | list[np.ndarray] | np.ndarray | float]
+) -> dict[str, np.ndarray]:
+    payload: dict[str, np.ndarray] = {}
+    for key, value in metrics.items():
+        if isinstance(value, np.ndarray):
+            payload[key] = value.astype(np.float32)
+            continue
+        if isinstance(value, list):
+            if not value:
+                payload[key] = np.array([], dtype=np.float32)
+            elif isinstance(value[0], np.ndarray):
+                payload[key] = np.stack(value).astype(np.float32)
+            else:
+                payload[key] = np.array(value, dtype=np.float32)
+            continue
+        payload[key] = np.array([value], dtype=np.float32)
+    return payload
+
+
+def _save_metrics(path: str, metrics: dict[str, list[float] | list[np.ndarray] | np.ndarray | float]) -> None:
+    np.savez(path, **_to_numpy_payload(metrics))
+
+
+def _load_metrics(path: str) -> dict[str, np.ndarray]:
+    if not os.path.exists(path):
+        return {}
+    data = np.load(path)
+    return {key: data[key] for key in data.files}
 
 
 def parse_args() -> argparse.Namespace:
@@ -55,6 +90,7 @@ def main() -> None:
     args = parse_args()
     should_train = args.train or (not args.train and not args.app)
     model: NeuralNetwork | None = None
+    training_dashboard: dict[str, np.ndarray] = {}
     hidden_dims = tuple(int(x.strip()) for x in args.hidden_dims.split(",") if x.strip())
 
     if should_train:
@@ -76,7 +112,7 @@ def main() -> None:
             seed=42,
         )
 
-        train_model(
+        metrics = train_model(
             model=model,
             X_train=X_train,
             y_train=y_train,
@@ -92,6 +128,10 @@ def main() -> None:
         )
         model.save_model(args.model_path)
         print(f"Saved model to: {args.model_path}")
+        metrics_path = f"{args.model_path}{METRICS_SUFFIX}"
+        _save_metrics(metrics_path, metrics)
+        training_dashboard = _load_metrics(metrics_path)
+        print(f"Saved training metrics to: {metrics_path}")
 
     if args.app:
         print("Starting digit applet...", flush=True)
@@ -105,6 +145,7 @@ def main() -> None:
             if args.debug_app:
                 print(f"Loading model from: {args.model_path}", flush=True)
             model = NeuralNetwork.load_model(args.model_path)
+            training_dashboard = _load_metrics(f"{args.model_path}{METRICS_SUFFIX}")
             if args.debug_app:
                 print("Model loaded successfully.", flush=True)
         try:
@@ -113,7 +154,7 @@ def main() -> None:
             print(f"Could not import Tkinter applet: {exc}")
             print("If needed on macOS, install a Python build with Tk support.")
             return
-        run_applet(model, debug=args.debug_app)
+        run_applet(model, debug=args.debug_app, training_dashboard=training_dashboard)
 
 
 if __name__ == "__main__":
