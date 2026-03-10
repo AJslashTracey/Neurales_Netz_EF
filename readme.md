@@ -2,6 +2,8 @@
 
 Simple NumPy-based feed-forward neural network for reduced MNIST digit classification.
 
+*Test change added so you can see a diff.*
+
 ## Setup
 
 ```bash
