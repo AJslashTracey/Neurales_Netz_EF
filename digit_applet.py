@@ -19,24 +19,6 @@ TREND_HEIGHT = 95
 PREVIEW_SCALE = 4
 HISTORY_LENGTH = 40
 
-FONT_HEADING = ("Helvetica", 12, "bold")
-FONT_BODY = ("Helvetica", 10)
-FONT_MONO = ("Consolas", 10)
-PANEL_PADDING = 12
-
-THEME = {
-    "background": "#d1d1d1",
-    "card": "#d7e4ff",
-    "card_dark": "#c5d3ff",
-    "card_border": "#ba5aff",
-    "accent": "#fcb065",
-    "accent_strong": "#ffb000",
-    "alert": "#e6583e",
-    "violet": "#ba5aff",
-    "blue": "#5ac8ff",
-    "grid": "#ffb000",
-}
-
 
 class DigitApplet:
     def __init__(self, model: NeuralNetwork, debug: bool = False) -> None:
@@ -45,72 +27,6 @@ class DigitApplet:
         self.root = tk.Tk()
         self.root.title("Digit Predictor")
         self.root.resizable(False, False)
-
-        self.style = ttk.Style()
-        try:
-            self.style.theme_use("clam")
-        except tk.TclError:
-            pass
-        self.style.configure("App.TFrame", background=THEME["background"])
-        self.style.configure(
-            "Card.TFrame",
-            background=THEME["card"],
-            relief="flat",
-            borderwidth=2,
-            highlightbackground=THEME["card_border"],
-            highlightcolor=THEME["card_border"],
-        )
-        self.style.configure(
-            "Accent.Horizontal.TProgressbar",
-            troughcolor=THEME["card"],
-            background=THEME["blue"],
-            bordercolor=THEME["card_border"],
-        )
-        self.style.configure(
-            "Accent.TButton",
-            background=THEME["accent"],
-            foreground="#1b1b1b",
-            borderwidth=0,
-            padding=6,
-            relief="flat",
-        )
-        self.style.map(
-            "Accent.TButton",
-            background=[("active", THEME["accent_strong"])],
-            relief=[("pressed", "groove")],
-        )
-        self.style.configure(
-            "Accent.TCheckbutton",
-            background=THEME["card"],
-            foreground=THEME["violet"],
-            font=FONT_BODY,
-        )
-        self.style.configure(
-            "CardLabel.TLabel",
-            background=THEME["card"],
-            foreground=THEME["violet"],
-            font=FONT_BODY,
-        )
-        self.style.configure(
-            "ValueLabel.TLabel",
-            background=THEME["card"],
-            foreground=THEME["blue"],
-            font=FONT_HEADING,
-        )
-        self.style.configure(
-            "MetaLabel.TLabel",
-            background=THEME["card"],
-            foreground="#1b1b1b",
-            font=FONT_BODY,
-        )
-        self.style.configure(
-            "Status.TLabel",
-            background=THEME["card"],
-            foreground=THEME["accent_strong"],
-            font=FONT_BODY,
-        )
-
-        self.root.configure(bg=THEME["background"])
 
         self.buffer = np.zeros((CANVAS_SIZE, CANVAS_SIZE), dtype=np.float32)
         self.last_x: int | None = None
@@ -144,28 +60,26 @@ class DigitApplet:
             print("Tk window created and focused.", flush=True)
 
     def _build_ui(self) -> None:
-        outer = ttk.Frame(self.root, padding=10, style="App.TFrame")
+        outer = ttk.Frame(self.root, padding=10)
         outer.grid(row=0, column=0, sticky="nsew")
 
-        left = ttk.Frame(outer, style="Card.TFrame")
+        left = ttk.Frame(outer)
         left.grid(row=0, column=0, rowspan=8, padx=(0, 14), sticky="n")
 
-        right = ttk.Frame(outer, style="Card.TFrame")
+        right = ttk.Frame(outer)
         right.grid(row=0, column=1, sticky="nw")
 
-        ttk.Label(
-            left,
-            text="Drawing Grid (28x28)",
-            style="CardLabel.TLabel",
-        ).grid(row=0, column=0, sticky="w", pady=(0, PANEL_PADDING))
+        ttk.Label(left, text="Drawing Grid (28x28)", font=("Helvetica", 12, "bold")).grid(
+            row=0, column=0, sticky="w", pady=(0, 8)
+        )
 
         self.canvas = tk.Canvas(
             left,
             width=CANVAS_SIZE,
             height=CANVAS_SIZE,
-            bg="#050b38",
-            highlightthickness=2,
-            highlightbackground=THEME["card_border"],
+            bg="black",
+            highlightthickness=1,
+            highlightbackground="#888888",
         )
         self.canvas.grid(row=1, column=0, sticky="w")
 
@@ -178,185 +92,111 @@ class DigitApplet:
             text="Show grid",
             variable=self.show_grid_var,
             command=self._redraw_grid,
-            style="Accent.TCheckbutton",
         ).grid(row=2, column=0, sticky="w", pady=(8, 0))
 
-        ttk.Label(
-            right,
-            textvariable=self.prediction_var,
-            style="ValueLabel.TLabel",
-        ).grid(row=0, column=0, sticky="w", pady=(0, PANEL_PADDING))
+        ttk.Label(right, textvariable=self.prediction_var, font=("Helvetica", 16, "bold")).grid(
+            row=0, column=0, sticky="w", pady=(0, 8)
+        )
 
         self.top_labels: list[ttk.Label] = []
         self.top_bars: list[ttk.Progressbar] = []
+        for _ in range(3):
+            self.top_labels.append(ttk.Label(right, text="-"))
+            self.top_bars.append(ttk.Progressbar(right, orient="horizontal", length=210, maximum=1.0))
 
         ttk.Label(
-            right,
-            text="Top predictions",
-            style="CardLabel.TLabel",
-        ).grid(row=1, column=0, sticky="w", pady=(0, PANEL_PADDING // 2))
+            right, text="Top predictions", font=("Helvetica", 11, "bold")
+        ).grid(row=1, column=0, sticky="w", pady=(2, 4))
 
-        top3_frame = tk.Frame(right, bg=THEME["card"], pady=2)
+        top3_frame = ttk.Frame(right)
         top3_frame.grid(row=2, column=0, sticky="w")
         for idx in range(3):
-            lbl = ttk.Label(
-                top3_frame,
-                text=f"#{idx + 1}: -",
-                width=12,
-                style="CardLabel.TLabel",
-            )
-            bar = ttk.Progressbar(
-                top3_frame,
-                orient="horizontal",
-                length=210,
-                maximum=1.0,
-                style="Accent.Horizontal.TProgressbar",
-            )
+            lbl = ttk.Label(top3_frame, text=f"#{idx + 1}: -", width=12)
+            bar = ttk.Progressbar(top3_frame, orient="horizontal", length=210, maximum=1.0)
             lbl.grid(row=idx, column=0, sticky="w", pady=3)
             bar.grid(row=idx, column=1, padx=(8, 0), pady=3, sticky="w")
-            self.top_labels.append(lbl)
-            self.top_bars.append(bar)
-        ttk.Separator(
-            right,
-            orient="horizontal",
-        ).grid(row=3, column=0, sticky="ew", pady=(PANEL_PADDING // 2, PANEL_PADDING))
+            self.top_labels[idx] = lbl
+            self.top_bars[idx] = bar
 
         ttk.Label(
-            right,
-            text="Probability graph (0-9)",
-            style="CardLabel.TLabel",
-        ).grid(row=4, column=0, sticky="w", pady=(PANEL_PADDING, PANEL_PADDING // 2))
+            right, text="Probability graph (0-9)", font=("Helvetica", 11, "bold")
+        ).grid(row=3, column=0, sticky="w", pady=(10, 4))
         self.graph_canvas = tk.Canvas(
             right,
             width=GRAPH_WIDTH,
             height=GRAPH_HEIGHT,
-            bg=THEME["card_dark"],
+            bg="#f3f3f3",
             highlightthickness=1,
-            highlightbackground=THEME["card_border"],
+            highlightbackground="#c9c9c9",
         )
-        self.graph_canvas.grid(row=5, column=0, sticky="w")
+        self.graph_canvas.grid(row=4, column=0, sticky="w")
 
         ttk.Label(
-            right,
-            text="Input + confidence diagnostics",
-            style="CardLabel.TLabel",
-        ).grid(row=6, column=0, sticky="w", pady=(PANEL_PADDING, PANEL_PADDING // 2))
+            right, text="Input + confidence diagnostics", font=("Helvetica", 11, "bold")
+        ).grid(row=5, column=0, sticky="w", pady=(10, 4))
 
-        diagnostics = tk.Frame(right, bg=THEME["card"])
-        diagnostics.grid(row=7, column=0, sticky="w")
+        diagnostics = ttk.Frame(right)
+        diagnostics.grid(row=6, column=0, sticky="w")
 
-        left_diag = tk.Frame(diagnostics, bg=THEME["card"])
+        left_diag = ttk.Frame(diagnostics)
         left_diag.grid(row=0, column=0, sticky="nw", padx=(0, 14))
-        right_diag = tk.Frame(diagnostics, bg=THEME["card"])
+        right_diag = ttk.Frame(diagnostics)
         right_diag.grid(row=0, column=1, sticky="nw")
 
-        ttk.Label(
-            left_diag,
-            text="Processed 28x28 preview",
-            style="CardLabel.TLabel",
-        ).grid(row=0, column=0, sticky="w")
+        ttk.Label(left_diag, text="Processed 28x28 preview").grid(row=0, column=0, sticky="w")
         self.preview_canvas = tk.Canvas(
             left_diag,
             width=MODEL_SIZE * PREVIEW_SCALE,
             height=MODEL_SIZE * PREVIEW_SCALE,
-            bg=THEME["card_dark"],
+            bg="#101010",
             highlightthickness=1,
-            highlightbackground=THEME["card_border"],
+            highlightbackground="#c9c9c9",
         )
         self.preview_canvas.grid(row=1, column=0, pady=(4, 0))
 
-        ttk.Label(
-            right_diag,
-            textvariable=self.confidence_var,
-            style="ValueLabel.TLabel",
-        ).grid(row=0, column=0, sticky="w")
-        self.confidence_bar = ttk.Progressbar(
-            right_diag,
-            orient="horizontal",
-            length=190,
-            maximum=1.0,
-            style="Accent.Horizontal.TProgressbar",
-        )
+        ttk.Label(right_diag, textvariable=self.confidence_var).grid(row=0, column=0, sticky="w")
+        self.confidence_bar = ttk.Progressbar(right_diag, orient="horizontal", length=190, maximum=1.0)
         self.confidence_bar.grid(row=1, column=0, sticky="w", pady=(2, 6))
 
-        ttk.Label(
-            right_diag,
-            textvariable=self.margin_var,
-            style="MetaLabel.TLabel",
-        ).grid(row=2, column=0, sticky="w")
-        self.margin_bar = ttk.Progressbar(
-            right_diag,
-            orient="horizontal",
-            length=190,
-            maximum=1.0,
-            style="Accent.Horizontal.TProgressbar",
-        )
+        ttk.Label(right_diag, textvariable=self.margin_var).grid(row=2, column=0, sticky="w")
+        self.margin_bar = ttk.Progressbar(right_diag, orient="horizontal", length=190, maximum=1.0)
         self.margin_bar.grid(row=3, column=0, sticky="w", pady=(2, 6))
 
-        ttk.Label(
-            right_diag,
-            textvariable=self.certainty_var,
-            style="MetaLabel.TLabel",
-        ).grid(row=4, column=0, sticky="w")
-        self.certainty_bar = ttk.Progressbar(
-            right_diag,
-            orient="horizontal",
-            length=190,
-            maximum=1.0,
-            style="Accent.Horizontal.TProgressbar",
-        )
+        ttk.Label(right_diag, textvariable=self.certainty_var).grid(row=4, column=0, sticky="w")
+        self.certainty_bar = ttk.Progressbar(right_diag, orient="horizontal", length=190, maximum=1.0)
         self.certainty_bar.grid(row=5, column=0, sticky="w", pady=(2, 0))
 
         ttk.Label(
-            right,
-            text="Confidence trend (recent predictions)",
-            style="CardLabel.TLabel",
-        ).grid(row=8, column=0, sticky="w", pady=(PANEL_PADDING, 0))
+            right, text="Confidence trend (recent predictions)", font=("Helvetica", 10, "bold")
+        ).grid(row=7, column=0, sticky="w", pady=(10, 3))
         self.trend_canvas = tk.Canvas(
             right,
             width=TREND_WIDTH,
             height=TREND_HEIGHT,
-            bg=THEME["card_dark"],
+            bg="#f3f3f3",
             highlightthickness=1,
-            highlightbackground=THEME["card_border"],
+            highlightbackground="#c9c9c9",
         )
-        self.trend_canvas.grid(row=9, column=0, sticky="w")
+        self.trend_canvas.grid(row=8, column=0, sticky="w")
 
-        controls = tk.Frame(right, bg=THEME["card"])
-        controls.grid(row=10, column=0, sticky="w", pady=(PANEL_PADDING, 0))
+        controls = ttk.Frame(right)
+        controls.grid(row=9, column=0, sticky="w", pady=(10, 0))
 
-        ttk.Button(
-            controls,
-            text="Predict",
-            command=self.predict,
-            style="Accent.TButton",
-        ).grid(row=0, column=0, padx=(0, 8))
-        ttk.Button(
-            controls,
-            text="Clear",
-            command=self.clear,
-            style="Accent.TButton",
-        ).grid(row=0, column=1, padx=(0, 8))
+        ttk.Button(controls, text="Predict", command=self.predict).grid(row=0, column=0, padx=(0, 8))
+        ttk.Button(controls, text="Clear", command=self.clear).grid(row=0, column=1, padx=(0, 8))
         ttk.Checkbutton(
             controls,
             text="Auto-predict",
             variable=self.auto_predict_var,
-            style="Accent.TCheckbutton",
         ).grid(row=0, column=2, sticky="w")
 
         ttk.Checkbutton(
             controls,
             text="Snap to cells",
             variable=self.snap_to_grid_var,
-            style="Accent.TCheckbutton",
         ).grid(row=0, column=3, padx=(12, 0), sticky="w")
 
-        self.status_label = ttk.Label(
-            right,
-            textvariable=self.status_var,
-            style="Status.TLabel",
-        )
-        self.status_label.grid(row=11, column=0, sticky="w", pady=(PANEL_PADDING // 2, 0))
+        ttk.Label(right, textvariable=self.status_var).grid(row=10, column=0, sticky="w", pady=(8, 0))
 
         self._redraw_grid()
         self._draw_probability_graph(np.zeros(10, dtype=np.float32))
@@ -369,7 +209,7 @@ class DigitApplet:
             return
 
         step = DOWNSAMPLE_FACTOR
-        color = THEME["grid"]
+        color = "#1f1f1f"
         for x in range(0, CANVAS_SIZE + 1, step):
             self.canvas.create_line(x, 0, x, CANVAS_SIZE, fill=color, tags="grid")
         for y in range(0, CANVAS_SIZE + 1, step):
@@ -388,7 +228,7 @@ class DigitApplet:
             GRAPH_HEIGHT - margin_bottom,
             GRAPH_WIDTH - 6,
             GRAPH_HEIGHT - margin_bottom,
-            fill=THEME["violet"],
+            fill="#888888",
         )
 
         for digit in range(10):
@@ -397,19 +237,12 @@ class DigitApplet:
             x1 = margin_left + (digit + 1) * bar_width - 3
             y1 = GRAPH_HEIGHT - margin_bottom
             y0 = y1 - p * max_h
-            self.graph_canvas.create_rectangle(
-                x0,
-                y0,
-                x1,
-                y1,
-                fill=THEME["blue"],
-                outline="",
-            )
+            self.graph_canvas.create_rectangle(x0, y0, x1, y1, fill="#1f8cff", outline="")
             self.graph_canvas.create_text(
                 (x0 + x1) / 2,
                 GRAPH_HEIGHT - 8,
                 text=str(digit),
-                fill=THEME["violet"],
+                fill="#333333",
                 font=("Helvetica", 9),
             )
 
@@ -467,15 +300,15 @@ class DigitApplet:
         left, right = 10, w - 10
         top, bottom = 10, h - 18
 
-        self.trend_canvas.create_line(left, bottom, right, bottom, fill=THEME["violet"])
-        self.trend_canvas.create_line(left, top, left, bottom, fill=THEME["violet"])
+        self.trend_canvas.create_line(left, bottom, right, bottom, fill="#9a9a9a")
+        self.trend_canvas.create_line(left, top, left, bottom, fill="#9a9a9a")
 
         if not self.recent_confidences:
             self.trend_canvas.create_text(
                 w / 2,
                 h / 2,
                 text="No predictions yet",
-                fill=THEME["accent"],
+                fill="#777777",
                 font=("Helvetica", 10),
             )
             return
@@ -492,21 +325,21 @@ class DigitApplet:
         conf_pts = _points(self.recent_confidences)
         margin_pts = _points(self.recent_margins)
         if len(conf_pts) >= 4:
-            self.trend_canvas.create_line(*margin_pts, fill=THEME["accent"], width=2, smooth=True)
-            self.trend_canvas.create_line(*conf_pts, fill=THEME["blue"], width=2, smooth=True)
+            self.trend_canvas.create_line(*margin_pts, fill="#9cc8ff", width=2, smooth=True)
+            self.trend_canvas.create_line(*conf_pts, fill="#1f8cff", width=2, smooth=True)
 
         self.trend_canvas.create_text(
             right - 42,
             top + 8,
             text="conf",
-            fill=THEME["blue"],
+            fill="#1f8cff",
             font=("Helvetica", 9, "bold"),
         )
         self.trend_canvas.create_text(
             right - 42,
             top + 22,
             text="margin",
-            fill=THEME["accent"],
+            fill="#6faef6",
             font=("Helvetica", 9),
         )
 
