@@ -22,11 +22,13 @@ HISTORY_LENGTH = 40
 THEME = {
     "background": "#d1d1d1",
     "card": "#d7e4ff",
+    "card_border": "#ba5aff",
     "accent": "#fcb065",
     "accent_strong": "#ffb000",
     "alert": "#e6583e",
     "violet": "#ba5aff",
     "blue": "#5ac8ff",
+    "grid": "#ffb000",
 }
 
 
@@ -44,11 +46,37 @@ class DigitApplet:
         except tk.TclError:
             pass
         self.style.configure("App.TFrame", background=THEME["background"])
-        self.style.configure("Card.TFrame", background=THEME["card"], relief="flat")
+        self.style.configure(
+            "Card.TFrame",
+            background=THEME["card"],
+            relief="flat",
+            borderwidth=2,
+            highlightbackground=THEME["card_border"],
+            highlightcolor=THEME["card_border"],
+        )
         self.style.configure(
             "Accent.Horizontal.TProgressbar",
             troughcolor=THEME["card"],
             background=THEME["blue"],
+            bordercolor=THEME["card_border"],
+        )
+        self.style.configure(
+            "Accent.TButton",
+            background=THEME["accent"],
+            foreground="#1b1b1b",
+            borderwidth=0,
+            padding=6,
+            relief="flat",
+        )
+        self.style.map(
+            "Accent.TButton",
+            background=[("active", THEME["accent_strong"])],
+            relief=[("pressed", "groove")],
+        )
+        self.style.configure(
+            "Accent.TCheckbutton",
+            background=THEME["card"],
+            foreground=THEME["violet"],
         )
 
         self.root.configure(bg=THEME["background"])
@@ -121,6 +149,7 @@ class DigitApplet:
             text="Show grid",
             variable=self.show_grid_var,
             command=self._redraw_grid,
+            style="Accent.TCheckbutton",
         ).grid(row=2, column=0, sticky="w", pady=(8, 0))
 
         ttk.Label(
@@ -278,18 +307,30 @@ class DigitApplet:
         controls = tk.Frame(right, bg=THEME["card"])
         controls.grid(row=9, column=0, sticky="w", pady=(10, 0))
 
-        ttk.Button(controls, text="Predict", command=self.predict).grid(row=0, column=0, padx=(0, 8))
-        ttk.Button(controls, text="Clear", command=self.clear).grid(row=0, column=1, padx=(0, 8))
+        ttk.Button(
+            controls,
+            text="Predict",
+            command=self.predict,
+            style="Accent.TButton",
+        ).grid(row=0, column=0, padx=(0, 8))
+        ttk.Button(
+            controls,
+            text="Clear",
+            command=self.clear,
+            style="Accent.TButton",
+        ).grid(row=0, column=1, padx=(0, 8))
         ttk.Checkbutton(
             controls,
             text="Auto-predict",
             variable=self.auto_predict_var,
+            style="Accent.TCheckbutton",
         ).grid(row=0, column=2, sticky="w")
 
         ttk.Checkbutton(
             controls,
             text="Snap to cells",
             variable=self.snap_to_grid_var,
+            style="Accent.TCheckbutton",
         ).grid(row=0, column=3, padx=(12, 0), sticky="w")
 
         self.status_label = ttk.Label(
