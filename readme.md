@@ -28,6 +28,9 @@ Current default training uses:
 - learning-rate decay
 - L2 weight decay
 
+### Best model to date
+`my_big_model.npz` was trained on the entire Kaggle MNIST dataset (60k train + 10k test) using the new PNG-aware loader. It reaches ~0.9705 validation accuracy (epoch 57) and ~0.9736 test accuracy after 75 epochs. If you just need the highest-performing checkpoint, point the Tkinter app or inference batch at that file instead of the default `model.npz`.
+
 ## Command-line flags
 Run `python main.py` with the flags below to control its behavior:
 
