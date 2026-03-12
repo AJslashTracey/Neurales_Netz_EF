@@ -3,6 +3,8 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 
+SUPPORTED_EXTENSIONS = (".jpg", ".jpeg", ".png")
+
 
 def load_images_from_folder(folder_path: str) -> tuple[np.ndarray, np.ndarray]:
     images: list[np.ndarray] = []
@@ -10,10 +12,18 @@ def load_images_from_folder(folder_path: str) -> tuple[np.ndarray, np.ndarray]:
 
     for digit in range(10):
         digit_path = os.path.join(folder_path, str(digit))
-        files = sorted(f for f in os.listdir(digit_path) if f.endswith(".jpg"))
+        files = sorted(
+            f for f in os.listdir(digit_path) if f.lower().endswith(SUPPORTED_EXTENSIONS)
+        )
         for filename in files:
             img = plt.imread(os.path.join(digit_path, filename))
-            img = img.astype(np.float32).flatten() / 255.0
+            img = img.astype(np.float32)
+            if img.ndim == 3:
+                # Keep compatibility with possible RGB/RGBA inputs.
+                img = img[..., 0]
+            if float(img.max()) > 1.0:
+                img = img / 255.0
+            img = np.clip(img, 0.0, 1.0).flatten()
             images.append(img)
             labels.append(digit)
 
@@ -37,6 +47,11 @@ def load_data(
 ) -> tuple[np.ndarray, ...]:
     X_train, y_train = load_images_from_folder(train_dir)
     X_test, y_test = load_images_from_folder(test_dir)
+    if X_train.size == 0 or X_test.size == 0:
+        raise ValueError(
+            "No images were loaded. Check paths and ensure class folders 0-9 contain "
+            f"files with extensions: {', '.join(SUPPORTED_EXTENSIONS)}"
+        )
 
     y_train = one_hot_encode(y_train)
     y_test = one_hot_encode(y_test)
