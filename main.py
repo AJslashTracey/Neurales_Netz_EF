@@ -48,10 +48,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--learning-rate", type=float, default=0.005, help="Learning rate.")
     parser.add_argument("--model-path", type=str, default="model.npz", help="Model file path.")
     parser.add_argument(
-        "--data-path",
+        "--train-data-path",
         type=str,
-        default="data/Reduced_MNIST_Data",
-        help="Dataset root containing Reduced_Trainging_data/ and Reduced_Testing_data/ subfolders.",
+        default="data/Reduced_MNIST_Data/Reduced_Trainging_data",
+        help="Path to the folder holding training digit JPGs.",
+    )
+    parser.add_argument(
+        "--test-data-path",
+        type=str,
+        default="data/Reduced_MNIST_Data/Reduced_Testing_data",
+        help="Path to the folder holding validation digit JPGs.",
     )
     parser.add_argument(
         "--hidden-dims",
@@ -103,7 +109,10 @@ def main() -> None:
         from data_loader import load_data
         from train import train_model
 
-        X_train, y_train, X_test, y_test = load_data(base_path=args.data_path)
+        X_train, y_train, X_test, y_test = load_data(
+            train_dir=args.train_data_path,
+            test_dir=args.test_data_path,
+        )
         print(
             f"Loaded data: X_train={X_train.shape}, y_train={y_train.shape}, "
             f"X_test={X_test.shape}, y_test={y_test.shape}"

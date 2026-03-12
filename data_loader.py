@@ -31,11 +31,12 @@ def shuffle_data(X: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return X[indices], y[indices]
 
 
-def load_data(base_path: str = "data/Reduced_MNIST_Data") -> tuple[np.ndarray, ...]:
-    X_train, y_train = load_images_from_folder(
-        os.path.join(base_path, "Reduced_Trainging_data")
-    )
-    X_test, y_test = load_images_from_folder(os.path.join(base_path, "Reduced_Testing_data"))
+def load_data(
+    train_dir: str = "data/Reduced_MNIST_Data/Reduced_Trainging_data",
+    test_dir: str = "data/Reduced_MNIST_Data/Reduced_Testing_data",
+) -> tuple[np.ndarray, ...]:
+    X_train, y_train = load_images_from_folder(train_dir)
+    X_test, y_test = load_images_from_folder(test_dir)
 
     y_train = one_hot_encode(y_train)
     y_test = one_hot_encode(y_test)
