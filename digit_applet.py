@@ -264,88 +264,10 @@ class DigitApplet:
 
         ttk.Label(right, textvariable=self.status_var).grid(row=10, column=0, sticky="w", pady=(8, 0))
 
-        ttk.Label(
-            right, text="Training + dataset dashboard", font=("Helvetica", 11, "bold")
-        ).grid(row=11, column=0, sticky="w", pady=(12, 4))
-        dashboard_tabs = ttk.Notebook(right)
-        dashboard_tabs.grid(row=12, column=0, sticky="w")
-
-        curves_tab = ttk.Frame(dashboard_tabs)
-        confusion_tab = ttk.Frame(dashboard_tabs)
-        signal_tab = ttk.Frame(dashboard_tabs)
-        dashboard_tabs.add(curves_tab, text="Curves")
-        dashboard_tabs.add(confusion_tab, text="Confusion")
-        dashboard_tabs.add(signal_tab, text="Signal/Benchmark")
-
-        self.learning_canvas = tk.Canvas(
-            curves_tab,
-            width=QUALITY_WIDTH,
-            height=LEARNING_HEIGHT,
-            bg="#f7f7f7",
-            highlightthickness=1,
-            highlightbackground="#c9c9c9",
-        )
-        self.learning_canvas.grid(row=0, column=0, sticky="w")
-        self.training_sparkline_canvas = tk.Canvas(
-            curves_tab,
-            width=QUALITY_WIDTH,
-            height=SPARKLINE_HEIGHT,
-            bg="#f7f7f7",
-            highlightthickness=1,
-            highlightbackground="#c9c9c9",
-        )
-        self.training_sparkline_canvas.grid(row=1, column=0, sticky="w", pady=(6, 0))
-        ttk.Label(curves_tab, textvariable=self.quality_summary_var).grid(
-            row=2, column=0, sticky="w", pady=(6, 2)
-        )
-
-        self.confusion_canvas = tk.Canvas(
-            confusion_tab,
-            width=QUALITY_WIDTH,
-            height=CONFUSION_HEIGHT,
-            bg="#f7f7f7",
-            highlightthickness=1,
-            highlightbackground="#c9c9c9",
-        )
-        self.confusion_canvas.grid(row=0, column=0, sticky="w")
-        ttk.Label(confusion_tab, textvariable=self.dataset_quality_var, justify="left").grid(
-            row=1, column=0, sticky="w", pady=(6, 2)
-        )
-
-        self.signal_canvas = tk.Canvas(
-            signal_tab,
-            width=QUALITY_WIDTH,
-            height=SIGNAL_HEIGHT,
-            bg="#f7f7f7",
-            highlightthickness=1,
-            highlightbackground="#c9c9c9",
-        )
-        self.signal_canvas.grid(row=0, column=0, sticky="w")
-        ttk.Label(signal_tab, textvariable=self.ceiling_progress_var).grid(
-            row=1, column=0, sticky="w", pady=(6, 0)
-        )
-        ttk.Label(signal_tab, textvariable=self.limits_var, justify="left").grid(
-            row=2, column=0, sticky="w", pady=(4, 4)
-        )
-        self.compare_canvas = tk.Canvas(
-            signal_tab,
-            width=QUALITY_WIDTH,
-            height=70,
-            bg="#f7f7f7",
-            highlightthickness=1,
-            highlightbackground="#c9c9c9",
-        )
-        self.compare_canvas.grid(row=3, column=0, sticky="w")
-
         self._redraw_grid()
         self._draw_probability_graph(np.zeros(10, dtype=np.float32))
         self._draw_processed_preview(self.last_processed)
         self._draw_trend_graph()
-        self._draw_learning_curves()
-        self._draw_training_sparkline()
-        self._draw_confusion_matrix()
-        self._draw_signal_noise_chart()
-        self._draw_benchmark_panel()
 
     def _redraw_grid(self) -> None:
         self.canvas.delete("grid")
