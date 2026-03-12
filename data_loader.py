@@ -10,10 +10,20 @@ def load_images_from_folder(folder_path: str) -> tuple[np.ndarray, np.ndarray]:
 
     for digit in range(10):
         digit_path = os.path.join(folder_path, str(digit))
-        files = sorted(f for f in os.listdir(digit_path) if f.endswith(".jpg"))
+        files = sorted(
+            f
+            for f in os.listdir(digit_path)
+            if f.lower().endswith((".jpg", ".jpeg", ".png"))
+        )
         for filename in files:
             img = plt.imread(os.path.join(digit_path, filename))
-            img = img.astype(np.float32).flatten() / 255.0
+            if img.ndim == 3:
+                img = np.mean(img, axis=2)
+            img = img.astype(np.float32)
+            max_val = float(np.max(img))
+            if max_val > 1.5:
+                img = img / 255.0
+            img = img.flatten()
             images.append(img)
             labels.append(digit)
 

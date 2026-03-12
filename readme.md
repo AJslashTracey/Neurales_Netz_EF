@@ -33,7 +33,7 @@ Run `python main.py` with the flags below to control its behavior:
 
 - `--train` (default) runs training on the reduced MNIST split and saves the model to `model.npz` unless you override `--model-path`.
 - `--app` opens the Tkinter drawing app. Use it together with `--model-path` if you already trained a model.
-- `--train-data-path` / `--test-data-path` let you pick arbitrary folders that mirror the `Reduced_Trainging_data` / `Reduced_Testing_data` layout, so you can experiment with different splits before launching training.
+- `--train-data-path` / `--test-data-path` let you pick arbitrary folders that mirror the `Reduced_Trainging_data` / `Reduced_Testing_data` layout, including the Kaggle `mnist_png` tree (PNG inputs are now averaged to grayscale and normalized if needed), so you can experiment with different splits before launching training.
 - `--epochs`, `--batch-size`, `--learning-rate`, `--weight-decay`, `--val-split`, `--hidden-dims` and the learning-rate decay/patience flags let you tweak the training loop.
 - `--no-augment` disables the built-in augmentation pipeline, which is on by default.
 - `--debug-app` prints extra startup logs when the applet loads, helpful if Tkinter is missing or failing.
