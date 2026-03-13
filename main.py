@@ -39,6 +39,31 @@ def _load_metrics(path: str) -> dict[str, np.ndarray]:
     return {key: data[key] for key in data.files}
 
 
+def _discover_model_path(preferred_path: str) -> str | None:
+    if preferred_path and os.path.exists(preferred_path):
+        return preferred_path
+
+    search_dirs = [".", "models"]
+    discovered: list[str] = []
+    for base_dir in search_dirs:
+        if not os.path.isdir(base_dir):
+            continue
+        for name in sorted(os.listdir(base_dir)):
+            if not name.endswith(".npz") or name.endswith(METRICS_SUFFIX):
+                continue
+            path = os.path.join(base_dir, name)
+            if os.path.isfile(path):
+                discovered.append(path)
+
+    if not discovered:
+        return None
+
+    for candidate in discovered:
+        if os.path.basename(candidate) == "model.npz":
+            return candidate
+    return discovered[0]
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train and run a digit classifier applet.")
     parser.add_argument("--train", action="store_true", help="Train the model.")
@@ -150,19 +175,19 @@ def main() -> None:
 
     if args.app:
         print("Starting digit applet...", flush=True)
+        app_model_path: str | None = args.model_path
         if model is None:
-            if not os.path.exists(args.model_path):
-                print(
-                    f"Model file not found: {args.model_path}\n"
-                    "Run training first, e.g.: python main.py --train"
-                )
-                return
-            if args.debug_app:
-                print(f"Loading model from: {args.model_path}", flush=True)
-            model = NeuralNetwork.load_model(args.model_path)
-            training_dashboard = _load_metrics(f"{args.model_path}{METRICS_SUFFIX}")
-            if args.debug_app:
-                print("Model loaded successfully.", flush=True)
+            resolved_model_path = _discover_model_path(args.model_path)
+            app_model_path = resolved_model_path
+            if resolved_model_path is None:
+                print("No startup model found. App will open and let you choose one.", flush=True)
+            else:
+                if args.debug_app:
+                    print(f"Loading model from: {resolved_model_path}", flush=True)
+                model = NeuralNetwork.load_model(resolved_model_path)
+                training_dashboard = _load_metrics(f"{resolved_model_path}{METRICS_SUFFIX}")
+                if args.debug_app:
+                    print("Model loaded successfully.", flush=True)
         try:
             from digit_applet import run_applet
         except Exception as exc:
@@ -173,7 +198,7 @@ def main() -> None:
             model,
             debug=args.debug_app,
             training_dashboard=training_dashboard,
-            model_path=args.model_path,
+            model_path=app_model_path,
         )
 
 

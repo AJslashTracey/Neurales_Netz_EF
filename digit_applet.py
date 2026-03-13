@@ -30,7 +30,7 @@ METRICS_SUFFIX = ".metrics.npz"
 class DigitApplet:
     def __init__(
         self,
-        model: NeuralNetwork,
+        model: NeuralNetwork | None,
         debug: bool = False,
         training_dashboard: dict[str, np.ndarray] | None = None,
         model_path: str | None = None,
@@ -78,6 +78,10 @@ class DigitApplet:
         self.root.after(200, lambda: self.root.attributes("-topmost", False))
         self.root.focus_force()
         self.root.geometry("+220+120")
+        if self.model is None:
+            self.status_var.set("No model loaded. Click 'Load model...' to begin.")
+            self.model_label_var.set("Model: not loaded")
+            self.root.after(150, self._choose_and_load_model)
 
         if self.debug:
             print("Tk window created and focused.", flush=True)
@@ -871,6 +875,9 @@ class DigitApplet:
 
     def predict(self) -> None:
         self.auto_predict_job = None
+        if self.model is None:
+            self.status_var.set("No model loaded. Click 'Load model...' first.")
+            return
         x = self._prepare_input()
         probs = self.model.predict_proba(x)[0]
         top_idx = np.argsort(probs)[::-1][:3]
@@ -913,7 +920,7 @@ class DigitApplet:
 
 
 def run_applet(
-    model: NeuralNetwork,
+    model: NeuralNetwork | None,
     debug: bool = False,
     training_dashboard: dict[str, np.ndarray] | None = None,
     model_path: str | None = None,
