@@ -169,7 +169,12 @@ def main() -> None:
             print(f"Could not import Tkinter applet: {exc}")
             print("If needed on macOS, install a Python build with Tk support.")
             return
-        run_applet(model, debug=args.debug_app, training_dashboard=training_dashboard)
+        run_applet(
+            model,
+            debug=args.debug_app,
+            training_dashboard=training_dashboard,
+            model_path=args.model_path,
+        )
 
 
 if __name__ == "__main__":

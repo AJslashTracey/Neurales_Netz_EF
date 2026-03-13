@@ -1,5 +1,6 @@
+import os
 import tkinter as tk
-from tkinter import ttk
+from tkinter import filedialog, ttk
 
 import numpy as np
 
@@ -23,6 +24,7 @@ SIGNAL_HEIGHT = 170
 SPARKLINE_HEIGHT = 66
 PREVIEW_SCALE = 4
 HISTORY_LENGTH = 40
+METRICS_SUFFIX = ".metrics.npz"
 
 
 class DigitApplet:
@@ -31,11 +33,14 @@ class DigitApplet:
         model: NeuralNetwork,
         debug: bool = False,
         training_dashboard: dict[str, np.ndarray] | None = None,
+        model_path: str | None = None,
     ) -> None:
         self.model = model
         self.debug = debug
+        self.model_path = model_path
         self.training_dashboard = training_dashboard or {}
         self.root = tk.Tk()
+        self.model_label_var = tk.StringVar(value="Model: unknown")
         self.root.title("Digit Predictor")
         self.root.resizable(False, False)
 
@@ -56,26 +61,13 @@ class DigitApplet:
         self.ceiling_progress_var = tk.StringVar(value="Benchmark progress: unavailable")
         self.dataset_quality_var = tk.StringVar(value="Dataset quality: unavailable")
         self.limits_var = tk.StringVar(value="Likely bottlenecks: dataset metrics unavailable")
+        if self.model_path:
+            self.model_label_var.set(f"Model: {os.path.basename(self.model_path)}")
 
         self.last_processed = np.zeros((MODEL_SIZE, MODEL_SIZE), dtype=np.float32)
         self.recent_confidences: list[float] = []
         self.recent_margins: list[float] = []
-        self.train_loss_hist = self._metric_series("train_loss")
-        self.val_loss_hist = self._metric_series("val_loss")
-        self.train_acc_hist = self._metric_series("train_acc")
-        self.val_acc_hist = self._metric_series("val_acc")
-        self.test_acc_hist = self._metric_series("test_acc")
-        self.confusion_hist = self._metric_matrix_series("test_confusion_norm", rows=10, cols=10)
-        self.per_class_acc_hist = self._metric_matrix_series("test_per_class_acc", rows=1, cols=10)
-        self.train_class_counts = self._metric_series("train_class_counts", size=10)
-        self.test_class_counts = self._metric_series("test_class_counts", size=10)
-        self.label_noise_estimate = self._metric_scalar("label_noise_estimate", default=0.02)
-        self.dataset_ceiling = self._metric_scalar(
-            "dataset_ceiling", default=max(0.0, 1.0 - self.label_noise_estimate)
-        )
-        self.augmentation_enabled = self._metric_scalar("augmentation_flag", default=1.0) >= 0.5
-        self.architecture_depth = int(round(self._metric_scalar("architecture_depth", default=0.0)))
-        self.parameter_count = int(round(self._metric_scalar("parameter_count", default=0.0)))
+        self._refresh_dashboard_metrics()
 
         self._build_ui()
         # Bring the window to front on launch.
@@ -124,6 +116,83 @@ class DigitApplet:
         if arr.size == 0:
             return default
         return float(arr[-1])
+
+    def _refresh_dashboard_metrics(self) -> None:
+        self.train_loss_hist = self._metric_series("train_loss")
+        self.val_loss_hist = self._metric_series("val_loss")
+        self.train_acc_hist = self._metric_series("train_acc")
+        self.val_acc_hist = self._metric_series("val_acc")
+        self.test_acc_hist = self._metric_series("test_acc")
+        self.confusion_hist = self._metric_matrix_series("test_confusion_norm", rows=10, cols=10)
+        self.per_class_acc_hist = self._metric_matrix_series("test_per_class_acc", rows=1, cols=10)
+        self.train_class_counts = self._metric_series("train_class_counts", size=10)
+        self.test_class_counts = self._metric_series("test_class_counts", size=10)
+        self.label_noise_estimate = self._metric_scalar("label_noise_estimate", default=0.02)
+        self.dataset_ceiling = self._metric_scalar(
+            "dataset_ceiling", default=max(0.0, 1.0 - self.label_noise_estimate)
+        )
+        self.augmentation_enabled = self._metric_scalar("augmentation_flag", default=1.0) >= 0.5
+        self.architecture_depth = int(round(self._metric_scalar("architecture_depth", default=0.0)))
+        self.parameter_count = int(round(self._metric_scalar("parameter_count", default=0.0)))
+
+    def _load_metrics_for_model(self, model_path: str) -> dict[str, np.ndarray]:
+        metrics_path = f"{model_path}{METRICS_SUFFIX}"
+        if not os.path.exists(metrics_path):
+            return {}
+        data = np.load(metrics_path)
+        return {key: data[key] for key in data.files}
+
+    def _refresh_optional_training_views(self) -> None:
+        if hasattr(self, "learning_canvas"):
+            self._draw_learning_curves()
+        if hasattr(self, "training_sparkline_canvas"):
+            self._draw_training_sparkline()
+        if hasattr(self, "confusion_canvas"):
+            self._draw_confusion_matrix()
+        if hasattr(self, "signal_canvas"):
+            self._draw_signal_noise_chart()
+        if hasattr(self, "compare_canvas"):
+            self._draw_benchmark_panel()
+
+    def _choose_and_load_model(self) -> None:
+        initial_dir = "."
+        if self.model_path:
+            initial_dir = os.path.dirname(self.model_path) or "."
+        selected = filedialog.askopenfilename(
+            parent=self.root,
+            title="Select model file",
+            initialdir=initial_dir,
+            filetypes=[
+                ("NumPy model files", "*.npz"),
+                ("All files", "*.*"),
+            ],
+        )
+        if not selected:
+            return
+        self._load_model_from_path(selected)
+
+    def _load_model_from_path(self, selected_path: str) -> None:
+        model_path = selected_path
+        if selected_path.endswith(METRICS_SUFFIX):
+            candidate = selected_path[: -len(METRICS_SUFFIX)]
+            if os.path.exists(candidate):
+                model_path = candidate
+            else:
+                self.status_var.set("Selected metrics file has no matching model file.")
+                return
+
+        try:
+            self.model = NeuralNetwork.load_model(model_path)
+        except Exception as exc:
+            self.status_var.set(f"Failed to load model: {exc}")
+            return
+
+        self.model_path = model_path
+        self.model_label_var.set(f"Model: {os.path.basename(model_path)}")
+        self.training_dashboard = self._load_metrics_for_model(model_path)
+        self._refresh_dashboard_metrics()
+        self._refresh_optional_training_views()
+        self.status_var.set(f"Loaded model: {os.path.basename(model_path)}")
 
     def _build_ui(self) -> None:
         outer = ttk.Frame(self.root, padding=10)
@@ -261,8 +330,12 @@ class DigitApplet:
             text="Snap to cells",
             variable=self.snap_to_grid_var,
         ).grid(row=0, column=3, padx=(12, 0), sticky="w")
+        ttk.Button(controls, text="Load model...", command=self._choose_and_load_model).grid(
+            row=0, column=4, padx=(12, 0)
+        )
 
         ttk.Label(right, textvariable=self.status_var).grid(row=10, column=0, sticky="w", pady=(8, 0))
+        ttk.Label(right, textvariable=self.model_label_var).grid(row=11, column=0, sticky="w", pady=(4, 0))
 
         self._redraw_grid()
         self._draw_probability_graph(np.zeros(10, dtype=np.float32))
@@ -843,9 +916,15 @@ def run_applet(
     model: NeuralNetwork,
     debug: bool = False,
     training_dashboard: dict[str, np.ndarray] | None = None,
+    model_path: str | None = None,
 ) -> None:
     try:
-        app = DigitApplet(model, debug=debug, training_dashboard=training_dashboard)
+        app = DigitApplet(
+            model,
+            debug=debug,
+            training_dashboard=training_dashboard,
+            model_path=model_path,
+        )
         if debug:
             print("Entering Tk mainloop...", flush=True)
             print("If no window is visible: check other Spaces and Cmd+Tab.", flush=True)
