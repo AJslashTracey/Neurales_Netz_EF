@@ -1,4 +1,5 @@
 import os
+import threading
 import tkinter as tk
 from tkinter import filedialog, ttk
 
@@ -48,6 +49,7 @@ class DigitApplet:
         self.last_x: int | None = None
         self.last_y: int | None = None
         self.auto_predict_job: str | None = None
+        self.training_in_progress = False
 
         self.auto_predict_var = tk.BooleanVar(value=False)
         self.show_grid_var = tk.BooleanVar(value=True)
@@ -145,6 +147,30 @@ class DigitApplet:
             return {}
         data = np.load(metrics_path)
         return {key: data[key] for key in data.files}
+
+    def _to_numpy_payload(
+        self, metrics: dict[str, list[float] | list[np.ndarray] | np.ndarray | float]
+    ) -> dict[str, np.ndarray]:
+        payload: dict[str, np.ndarray] = {}
+        for key, value in metrics.items():
+            if isinstance(value, np.ndarray):
+                payload[key] = value.astype(np.float32)
+                continue
+            if isinstance(value, list):
+                if not value:
+                    payload[key] = np.array([], dtype=np.float32)
+                elif isinstance(value[0], np.ndarray):
+                    payload[key] = np.stack(value).astype(np.float32)
+                else:
+                    payload[key] = np.array(value, dtype=np.float32)
+                continue
+            payload[key] = np.array([value], dtype=np.float32)
+        return payload
+
+    def _save_metrics(
+        self, path: str, metrics: dict[str, list[float] | list[np.ndarray] | np.ndarray | float]
+    ) -> None:
+        np.savez(path, **self._to_numpy_payload(metrics))
 
     def _refresh_optional_training_views(self) -> None:
         if hasattr(self, "learning_canvas"):
@@ -337,6 +363,8 @@ class DigitApplet:
         ttk.Button(controls, text="Load model...", command=self._choose_and_load_model).grid(
             row=0, column=4, padx=(12, 0)
         )
+        self.train_button = ttk.Button(controls, text="Train model...", command=self._open_training_dialog)
+        self.train_button.grid(row=0, column=5, padx=(8, 0))
 
         ttk.Label(right, textvariable=self.status_var).grid(row=10, column=0, sticky="w", pady=(8, 0))
         ttk.Label(right, textvariable=self.model_label_var).grid(row=11, column=0, sticky="w", pady=(4, 0))
@@ -895,6 +923,254 @@ class DigitApplet:
         self._draw_processed_preview(self.last_processed)
         self._update_confidence_metrics(probs)
         self.status_var.set("Prediction updated.")
+
+    def _open_training_dialog(self) -> None:
+        if self.training_in_progress:
+            self.status_var.set("Training already running. Please wait for completion.")
+            return
+
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Train model")
+        dialog.resizable(False, False)
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        content = ttk.Frame(dialog, padding=10)
+        content.grid(row=0, column=0, sticky="nsew")
+
+        default_model_path = self.model_path or "model.npz"
+        train_dir_var = tk.StringVar(value="data/Reduced_MNIST_Data/Reduced_Trainging_data")
+        test_dir_var = tk.StringVar(value="data/Reduced_MNIST_Data/Reduced_Testing_data")
+        model_path_var = tk.StringVar(value=default_model_path)
+        epochs_var = tk.StringVar(value="80")
+        batch_size_var = tk.StringVar(value="64")
+        learning_rate_var = tk.StringVar(value="0.005")
+        hidden_dims_var = tk.StringVar(value="256,128,64")
+        weight_decay_var = tk.StringVar(value="0.0001")
+        val_split_var = tk.StringVar(value="0.1")
+        lr_decay_step_var = tk.StringVar(value="20")
+        lr_decay_factor_var = tk.StringVar(value="0.5")
+        patience_var = tk.StringVar(value="12")
+        augment_var = tk.BooleanVar(value=True)
+
+        if self.model is not None and self.model.weights:
+            inferred_hidden = ",".join(str(w.shape[1]) for w in self.model.weights[:-1])
+            if inferred_hidden:
+                hidden_dims_var.set(inferred_hidden)
+
+        def _browse_train_dir() -> None:
+            selected = filedialog.askdirectory(parent=dialog, title="Select training data folder")
+            if selected:
+                train_dir_var.set(selected)
+
+        def _browse_test_dir() -> None:
+            selected = filedialog.askdirectory(parent=dialog, title="Select testing data folder")
+            if selected:
+                test_dir_var.set(selected)
+
+        def _browse_model_file() -> None:
+            selected = filedialog.asksaveasfilename(
+                parent=dialog,
+                title="Choose model output file",
+                defaultextension=".npz",
+                filetypes=[("NumPy model files", "*.npz"), ("All files", "*.*")],
+                initialfile=os.path.basename(model_path_var.get()) or "model.npz",
+            )
+            if selected:
+                model_path_var.set(selected)
+
+        row = 0
+        ttk.Label(content, text="Train data folder").grid(row=row, column=0, sticky="w")
+        ttk.Entry(content, textvariable=train_dir_var, width=46).grid(row=row, column=1, padx=(6, 6))
+        ttk.Button(content, text="Browse...", command=_browse_train_dir).grid(row=row, column=2)
+        row += 1
+
+        ttk.Label(content, text="Test data folder").grid(row=row, column=0, sticky="w", pady=(6, 0))
+        ttk.Entry(content, textvariable=test_dir_var, width=46).grid(
+            row=row, column=1, padx=(6, 6), pady=(6, 0)
+        )
+        ttk.Button(content, text="Browse...", command=_browse_test_dir).grid(row=row, column=2, pady=(6, 0))
+        row += 1
+
+        ttk.Label(content, text="Model output path").grid(row=row, column=0, sticky="w", pady=(6, 0))
+        ttk.Entry(content, textvariable=model_path_var, width=46).grid(
+            row=row, column=1, padx=(6, 6), pady=(6, 0)
+        )
+        ttk.Button(content, text="Browse...", command=_browse_model_file).grid(row=row, column=2, pady=(6, 0))
+        row += 1
+
+        ttk.Label(content, text="Epochs").grid(row=row, column=0, sticky="w", pady=(8, 0))
+        ttk.Entry(content, textvariable=epochs_var, width=14).grid(row=row, column=1, sticky="w", padx=(6, 0), pady=(8, 0))
+        row += 1
+
+        ttk.Label(content, text="Batch size").grid(row=row, column=0, sticky="w", pady=(4, 0))
+        ttk.Entry(content, textvariable=batch_size_var, width=14).grid(row=row, column=1, sticky="w", padx=(6, 0), pady=(4, 0))
+        row += 1
+
+        ttk.Label(content, text="Learning rate").grid(row=row, column=0, sticky="w", pady=(4, 0))
+        ttk.Entry(content, textvariable=learning_rate_var, width=14).grid(
+            row=row, column=1, sticky="w", padx=(6, 0), pady=(4, 0)
+        )
+        row += 1
+
+        ttk.Label(content, text="Hidden dims (csv)").grid(row=row, column=0, sticky="w", pady=(4, 0))
+        ttk.Entry(content, textvariable=hidden_dims_var, width=24).grid(
+            row=row, column=1, sticky="w", padx=(6, 0), pady=(4, 0)
+        )
+        row += 1
+
+        ttk.Label(content, text="Weight decay").grid(row=row, column=0, sticky="w", pady=(4, 0))
+        ttk.Entry(content, textvariable=weight_decay_var, width=14).grid(
+            row=row, column=1, sticky="w", padx=(6, 0), pady=(4, 0)
+        )
+        row += 1
+
+        ttk.Label(content, text="Validation split").grid(row=row, column=0, sticky="w", pady=(4, 0))
+        ttk.Entry(content, textvariable=val_split_var, width=14).grid(row=row, column=1, sticky="w", padx=(6, 0), pady=(4, 0))
+        row += 1
+
+        ttk.Label(content, text="LR decay step").grid(row=row, column=0, sticky="w", pady=(4, 0))
+        ttk.Entry(content, textvariable=lr_decay_step_var, width=14).grid(
+            row=row, column=1, sticky="w", padx=(6, 0), pady=(4, 0)
+        )
+        row += 1
+
+        ttk.Label(content, text="LR decay factor").grid(row=row, column=0, sticky="w", pady=(4, 0))
+        ttk.Entry(content, textvariable=lr_decay_factor_var, width=14).grid(
+            row=row, column=1, sticky="w", padx=(6, 0), pady=(4, 0)
+        )
+        row += 1
+
+        ttk.Label(content, text="Early stopping patience").grid(row=row, column=0, sticky="w", pady=(4, 0))
+        ttk.Entry(content, textvariable=patience_var, width=14).grid(
+            row=row, column=1, sticky="w", padx=(6, 0), pady=(4, 0)
+        )
+        row += 1
+
+        ttk.Checkbutton(content, text="Use data augmentation", variable=augment_var).grid(
+            row=row, column=0, columnspan=2, sticky="w", pady=(8, 0)
+        )
+        row += 1
+
+        button_row = ttk.Frame(content)
+        button_row.grid(row=row, column=0, columnspan=3, sticky="e", pady=(10, 0))
+
+        def _start_training() -> None:
+            try:
+                hidden_dims = tuple(
+                    int(x.strip()) for x in hidden_dims_var.get().split(",") if x.strip()
+                )
+                if not hidden_dims:
+                    raise ValueError("Hidden dims must contain at least one layer size.")
+
+                train_params = {
+                    "train_dir": train_dir_var.get().strip(),
+                    "test_dir": test_dir_var.get().strip(),
+                    "model_path": model_path_var.get().strip(),
+                    "epochs": int(epochs_var.get()),
+                    "batch_size": int(batch_size_var.get()),
+                    "learning_rate": float(learning_rate_var.get()),
+                    "hidden_dims": hidden_dims,
+                    "weight_decay": float(weight_decay_var.get()),
+                    "val_split": float(val_split_var.get()),
+                    "lr_decay_step": int(lr_decay_step_var.get()),
+                    "lr_decay_factor": float(lr_decay_factor_var.get()),
+                    "patience": int(patience_var.get()),
+                    "use_augmentation": bool(augment_var.get()),
+                }
+            except Exception as exc:
+                self.status_var.set(f"Invalid training settings: {exc}")
+                return
+
+            if not train_params["train_dir"] or not train_params["test_dir"]:
+                self.status_var.set("Training/test data paths are required.")
+                return
+            if not train_params["model_path"]:
+                self.status_var.set("Model output path is required.")
+                return
+            if self.training_in_progress:
+                self.status_var.set("Training already in progress.")
+                return
+
+            self.training_in_progress = True
+            self.train_button.state(["disabled"])
+            self.status_var.set("Training started... progress is printed in terminal.")
+            dialog.destroy()
+            thread = threading.Thread(
+                target=self._train_in_background,
+                args=(train_params,),
+                daemon=True,
+            )
+            thread.start()
+
+        ttk.Button(button_row, text="Cancel", command=dialog.destroy).grid(row=0, column=0, padx=(0, 8))
+        ttk.Button(button_row, text="Start training", command=_start_training).grid(row=0, column=1)
+
+    def _train_in_background(self, params: dict[str, object]) -> None:
+        try:
+            from data_loader import load_data
+            from train import train_model
+
+            X_train, y_train, X_test, y_test = load_data(
+                train_dir=str(params["train_dir"]),
+                test_dir=str(params["test_dir"]),
+            )
+
+            model = NeuralNetwork(
+                input_dim=X_train.shape[1],
+                hidden_dims=tuple(int(v) for v in params["hidden_dims"]),  # type: ignore[arg-type]
+                output_dim=y_train.shape[1],
+                learning_rate=float(params["learning_rate"]),
+                weight_decay=float(params["weight_decay"]),
+                seed=42,
+            )
+
+            metrics = train_model(
+                model=model,
+                X_train=X_train,
+                y_train=y_train,
+                X_test=X_test,
+                y_test=y_test,
+                epochs=int(params["epochs"]),
+                batch_size=int(params["batch_size"]),
+                val_split=float(params["val_split"]),
+                use_augmentation=bool(params["use_augmentation"]),
+                lr_decay_step=int(params["lr_decay_step"]),
+                lr_decay_factor=float(params["lr_decay_factor"]),
+                early_stopping_patience=int(params["patience"]),
+            )
+
+            model_path = str(params["model_path"])
+            model.save_model(model_path)
+            metrics_path = f"{model_path}{METRICS_SUFFIX}"
+            self._save_metrics(metrics_path, metrics)
+            dashboard = self._load_metrics_for_model(model_path)
+            self.root.after(0, lambda: self._on_training_success(model, model_path, dashboard))
+        except Exception as exc:
+            self.root.after(0, lambda: self._on_training_failure(exc))
+
+    def _on_training_success(
+        self,
+        model: NeuralNetwork,
+        model_path: str,
+        dashboard: dict[str, np.ndarray],
+    ) -> None:
+        self.model = model
+        self.model_path = model_path
+        self.training_dashboard = dashboard
+        self._refresh_dashboard_metrics()
+        self._refresh_optional_training_views()
+        self.model_label_var.set(f"Model: {os.path.basename(model_path)}")
+        self.status_var.set(
+            f"Training finished. Model saved to {os.path.basename(model_path)} and loaded."
+        )
+        self.training_in_progress = False
+        self.train_button.state(["!disabled"])
+
+    def _on_training_failure(self, exc: Exception) -> None:
+        self.status_var.set(f"Training failed: {exc}")
+        self.training_in_progress = False
+        self.train_button.state(["!disabled"])
 
     def clear(self) -> None:
         self.canvas.delete("all")
