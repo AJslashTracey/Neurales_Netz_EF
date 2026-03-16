@@ -47,6 +47,17 @@ make test-loader  # run a quick shape check on the loader
 
 `tests/test_loader.py` verifies the flattening + one-hot encoding pipeline.
 
+## Training Demo Video
+
+The training process demo is included below.
+
+<video controls preload="metadata" width="900" src="./2026-03-16%2014-13-42.mov">
+  Your browser does not support embedded video playback.
+</video>
+
+If the embedded player does not load in your viewer, use this direct file link:
+[Open training demo video](./2026-03-16%2014-13-42.mov).
+
 ### Best model to date
 Run `python main.py` with the flags below to control its behavior:
 
