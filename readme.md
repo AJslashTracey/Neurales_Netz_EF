@@ -52,7 +52,7 @@ make test-loader  # run a quick shape check on the loader
 Training demo preview:
 
 <div align="center">
-  <img src="./2026-03-16 14-13-42.gif" alt="Training demo" />
+  <img src="./2026-03-16 14-13-42.gif" alt="Training demo" width="1100" />
 </div>
 
 For the full recording, use:
