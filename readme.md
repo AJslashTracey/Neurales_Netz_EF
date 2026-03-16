@@ -49,11 +49,13 @@ make test-loader  # run a quick shape check on the loader
 
 ## Training Demo Video
 
-Some Markdown viewers do not play local `.mov` files inline (codec/viewer limitation).
-Use the direct file link below to open it in your system player:
+Training demo preview:
+
+![Training demo](<./2026-03-16 14-13-42.gif>)
+
+For the full recording, use:
 
 - [Open training demo video](<./2026-03-16 14-13-42.mov>)
-- If your browser still cannot play it, open the file with QuickTime directly from the repo root.
 
 ### Best model to date
 Run `python main.py` with the flags below to control its behavior:
