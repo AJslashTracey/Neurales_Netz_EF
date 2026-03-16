@@ -7,15 +7,13 @@ Simple NumPy-based feed-forward neural network for reduced MNIST digit classific
 ## Setup
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## Run Training
+## Run Training in
 
 ```bash
-python main.py
+python main.py (option flags etc..) 
 ```
 
 The script loads data from `data/Reduced_MNIST_Data`, trains a model with architecture
@@ -29,7 +27,7 @@ Current default training uses:
 - L2 weight decay
 
 ### Best model to date
-`models/kaggle_mnist_full.npz` (formerly `my_big_model.npz`) was trained on the full Kaggle MNIST split (60k train + 10k test) with the PNG-aware loader that normalizes, flattens, and shuffles each image. It ran 75 epochs with stepped learning rates (0.005 → 0.0025 → 0.00125 → 0.00063), topped out at val acc ≈ 0.9705 (epoch 57), and achieves ~0.9736 on the official test set. Inference on that dataset produces ~0.9736 accuracy by default. The original `models/initial_model.npz` (previously `model.npz`) still ships with the repo as a baseline checkpoint if you need to compare performance.
+`models/kaggle_mnist_full.npz was trained on the full Kaggle MNIST split (60k train + 10k test) with the PNG-aware loader that normalizes, flattens, and shuffles each image. It ran 75 epochs with stepped learning rates (0.005 → 0.0025 → 0.00125 → 0.00063), topped out at val acc ≈ 0.9705 (epoch 57), and achieves ~0.9736 on the official test set. Inference on that dataset produces ~0.9736 accuracy by default. The original `models/initial_model.npz` (previously `model.npz`) still ships with the repo as a baseline checkpoint if you need to compare performance.
 
 ## Command-line flags
 
@@ -57,7 +55,13 @@ make test-loader  # run a quick shape check on the loader
 Training demo preview:
 
 <div align="center">
-  <img src="./2026-03-16 14-13-42.gif" alt="Training demo" width="1100" />
+  <img src="./training_model.gif" alt="Training demo" width="1100" />
+</div>
+
+Model usage preview:
+
+<div align="center">
+  <img src="./showing_model.gif" alt="Model usage demo" width="1100" />
 </div>
 
 For the full recording, use:
