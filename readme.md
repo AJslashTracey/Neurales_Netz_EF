@@ -1,81 +1,81 @@
 # Neuronales Netz
 
-This project is a NumPy neural network that reads handwritten digits (MNIST).  
-It also has a Tkinter app where you can draw a digit and see the prediction live.
+Dieses Projekt ist ein NumPy-Neuronales-Netz, das handgeschriebene Ziffern (MNIST) erkennt.  
+Außerdem gibt es eine Tkinter-App, in der du eine Ziffer zeichnen und die Vorhersage live sehen kannst.
 
-## Setup
+## Einrichtung
 
-Install the required packages:
+Installiere die benoetigten Pakete:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-## Run the app
+## App starten
 
 ```bash
 python app.py --app
 ```
 
-If no model is loaded, the app will ask you to pick a `.npz` model file.
+Wenn kein Modell geladen ist, fragt die App nach einer `.npz`-Modelldatei.
 
-## Model results
+## Modellergebnisse
 
-Model files are in `models/`.
+Die Modelldateien liegen in `models/`.
 
-| Model | Trained on dataset | Train acc | Val acc | Test acc | Simple note |
+| Modell | Trainiert auf Datensatz | Train acc | Val acc | Test acc | Kurze Notiz |
 | --- | --- | --- | --- | --- | --- |
-| `models/kaggle_mnist_full.npz` | `data/kaggle_mnist/mnist_png` (60k train / 10k test) | 0.9737 | 0.9697 | 0.9743 | Best all-round model. Great default choice. |
-| `models/M4_pro_showcase_training.npz` | `data/kaggle_mnist/mnist_png` (same split/settings) | 0.9729 | 0.9722 | 0.9725 | Very close to best model. Used in showcase image. |
-| `models/initial_model.npz` | Older reduced-MNIST workflow (`data/Reduced_MNIST_Data` style) | - | - | - | Older baseline model. No metrics file included. |
+| `models/kaggle_mnist_full.npz` | `data/kaggle_mnist/mnist_png` (60k Train / 10k Test) | 0.9737 | 0.9697 | 0.9743 | Bestes Gesamtmodell. Sehr gute Standardwahl. |
+| `models/M4_pro_showcase_training.npz` | `data/kaggle_mnist/mnist_png` (gleicher Split/gleiche Einstellungen) | 0.9729 | 0.9722 | 0.9725 | Sehr nah am besten Modell. Im Showcase-Bild genutzt. |
+| `models/initial_model.npz` | Aelterer Reduced-MNIST-Workflow (im Stil von `data/Reduced_MNIST_Data`) | - | - | - | Aelteres Basis-Modell. Keine Metrics-Datei enthalten. |
 
-Extra training info from metrics files:
-- Network shape: `784 -> 256 -> 128 -> 64 -> 10`
-- Depth: 4 layers
-- Parameters: about 242,762
-- Estimated dataset ceiling: about 0.98
-- Data augmentation: enabled
+Zusatzinfos aus den Metrics-Dateien:
+- Netzwerkstruktur: `784 -> 256 -> 128 -> 64 -> 10`
+- Tiefe: 4 Schichten
+- Parameter: ca. 242,762
+- Geschaetzte Datensatz-Obergrenze: ca. 0.98
+- Datenaugmentation: aktiviert
 
-## How training works
+## So funktioniert das Training
 
-The training code is in `train.py` and launched from `app.py`/`main.py`.
+Der Trainingscode liegt in `train.py` und wird ueber `app.py`/`main.py` gestartet.
 
-Main steps:
-- mini-batch training
-- cross-entropy loss + L2 weight decay
-- validation split + early stopping
-- learning-rate step decay
-- data augmentation (small shifts, brightness/stroke change, mild thickening, noise)
-- saves train/val/test metrics every epoch
+Hauptschritte:
+- Mini-Batch-Training
+- Cross-Entropy-Loss + L2-Weight-Decay
+- Validierungs-Split + Early Stopping
+- schrittweiser Learning-Rate-Abfall
+- Datenaugmentation (kleine Verschiebungen, Helligkeit/Strichstaerke, leichtes Verdicken, Rauschen)
+- speichert Train/Val/Test-Metriken in jeder Epoche
 
-Example training command:
+Beispiel fuer einen Trainingsbefehl:
 
 ```bash
 python app.py --train --epochs 80 --batch-size 64 --learning-rate 0.005 --hidden-dims 256,128,64 --weight-decay 1e-4 --lr-decay-step 20 --lr-decay-factor 0.5 --patience 12 --model-path models/M4_pro_showcase_training.npz
 ```
 
-## What the app shows
+## Was die App anzeigt
 
-When you run `python app.py --app`, you can see:
-- 28x28 drawing grid
-- top prediction + top-3 predictions
-- probability chart for digits 0 to 9
-- processed 28x28 preview image
-- confidence values (top score, top-2 gap, certainty score)
-- confidence trend from recent predictions
-- buttons to load a model and train from inside the app
-- extra training dashboards if a `.metrics.npz` file exists
+Wenn du `python app.py --app` startest, siehst du:
+- 28x28-Zeichenfeld
+- beste Vorhersage + Top-3-Vorhersagen
+- Wahrscheinlichkeitsdiagramm fuer die Ziffern 0 bis 9
+- verarbeitete 28x28-Vorschau des Inputs
+- Konfidenzwerte (Top-Score, Abstand Top-1 zu Top-2, Certainty-Score)
+- Konfidenzverlauf aus den letzten Vorhersagen
+- Buttons zum Laden eines Modells und zum Trainieren direkt in der App
+- zusaetzliche Trainings-Dashboards, falls eine `.metrics.npz` vorhanden ist
 
-## App showcase
+## App-Showcase
 
-<img src="assets/media/app_show_case.png" alt="Digit predictor app showcase" width="1200" />
+<img src="assets/media/app_show_case.png" alt="Digit-Predictor-App-Showcase" width="1200" />
 
 ## Demos
 
-Training demo:
+Training-Demo:
 
-<img src="assets/media/training_model.gif" alt="Training demo" width="1200" />
+<img src="assets/media/training_model.gif" alt="Training-Demo" width="1200" />
 
-Model usage demo:
+Modellnutzung-Demo:
 
-<img src="assets/media/showing_model.gif" alt="Model usage demo" width="1200" />
+<img src="assets/media/showing_model.gif" alt="Modellnutzung-Demo" width="1200" />
