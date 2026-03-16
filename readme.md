@@ -51,7 +51,9 @@ make test-loader  # run a quick shape check on the loader
 
 Training demo preview:
 
-![Training demo](<./2026-03-16 14-13-42.gif>)
+<div align="center">
+  <img src="./2026-03-16 14-13-42.gif" alt="Training demo" />
+</div>
 
 For the full recording, use:
 
