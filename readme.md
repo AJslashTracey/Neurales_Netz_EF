@@ -39,6 +39,11 @@ Current default training uses:
 
 The repository now ships with a `Makefile` covering the core tasks:
 
+## Model catalogue
+
+`docs/models.md` now outlines every checkpoint under `models/`, including the datasets, validation/test accuracy, and where to find the metrics archives. Use this doc for quick references when choosing which checkpoint to load in training, inference, or the Tkinter app.
+
+
 ```bash
 make install      # set up virtualenv & install deps
 make train-kaggle # rebuild the best Kaggle MNIST model
