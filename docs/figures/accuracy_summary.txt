@@ -1,0 +1,2 @@
+Epochs, Val Acc, Test Acc, Dataset
+kaggle_mnist_full: epochs=75, best_val=0.9705, test_at_best=0.9736

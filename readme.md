@@ -32,6 +32,23 @@ Current default training uses:
 `models/kaggle_mnist_full.npz` (formerly `my_big_model.npz`) was trained on the full Kaggle MNIST split (60k train + 10k test) with the PNG-aware loader that normalizes, flattens, and shuffles each image. It ran 75 epochs with stepped learning rates (0.005 → 0.0025 → 0.00125 → 0.00063), topped out at val acc ≈ 0.9705 (epoch 57), and achieves ~0.9736 on the official test set. Inference on that dataset produces ~0.9736 accuracy by default. The original `models/initial_model.npz` (previously `model.npz`) still ships with the repo as a baseline checkpoint if you need to compare performance.
 
 ## Command-line flags
+
+> The `docs/project-report.md` file captures the datasets, experiments, results, grading notes, and reproduction steps (run `make install && make train-kaggle`). The CSV summary `docs/figures/accuracy_summary.txt` lists the validation/test accuracy for each checkpoint after the latest training run.
+
+## Automation
+
+The repository now ships with a `Makefile` covering the core tasks:
+
+```bash
+make install      # set up virtualenv & install deps
+make train-kaggle # rebuild the best Kaggle MNIST model
+make test-loader  # run a quick shape check on the loader
+make plot-metrics # summarize the metrics into docs/figures/accuracy_summary.txt
+```
+
+`tests/test_loader.py` verifies the flattening + one-hot encoding pipeline, while `scripts/plot_metrics.py` reexports the checkpoint metrics into `docs/figures/accuracy_summary.txt` for easy comparison.
+
+### Best model to date
 Run `python main.py` with the flags below to control its behavior:
 
 - `--train` (default) runs training on the reduced MNIST split and saves the model to `model.npz` unless you override `--model-path`.
