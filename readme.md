@@ -1,11 +1,11 @@
 # Neuronales Netz
 
 Dieses Projekt ist ein NumPy-Neuronales-Netz, das handgeschriebene Ziffern (MNIST) erkennt.  
-Außerdem gibt es eine Tkinter-App, in der du eine Ziffer zeichnen und die Vorhersage live sehen kannst.
+Außerdem gibt es eine Tkinter-App, in der Sie eine Ziffer zeichnen und die Vorhersage live sehen koennen.
 
 ## Einrichtung
 
-Installiere die benoetigten Pakete:
+Installieren Sie die benoetigten Pakete:
 
 ```bash
 pip install -r requirements.txt
@@ -56,7 +56,7 @@ python app.py --train --epochs 80 --batch-size 64 --learning-rate 0.005 --hidden
 
 ## Was die App anzeigt
 
-Wenn du `python app.py --app` startest, siehst du:
+Wenn Sie `python app.py --app` starten, sehen Sie:
 - 28x28-Zeichenfeld
 - beste Vorhersage + Top-3-Vorhersagen
 - Wahrscheinlichkeitsdiagramm fuer die Ziffern 0 bis 9
