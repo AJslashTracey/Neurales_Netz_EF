@@ -64,9 +64,6 @@ Model usage preview:
   <img src="./showing_model.gif" alt="Model usage demo" width="1100" />
 </div>
 
-For the full recording, use:
-
-- [Open training demo video](<./2026-03-16 14-13-42.mov>)
 
 ### Best model to date
 Run `python main.py` with the flags below to control its behavior:
