@@ -1,81 +1,87 @@
 # Neuronales Netz
 
-Dieses Projekt ist ein NumPy-Neuronales-Netz, das handgeschriebene Ziffern (MNIST) erkennt.  
-Außerdem gibt es eine Tkinter-App, in der Sie eine Ziffer zeichnen und die Vorhersage live sehen koennen.
+Dieses Projekt ist ein auf NumPy basierendes Feed-Forward-Netzwerk, das auf verschiedene MNIST-Splits trainiert wurde, plus eine Tkinter-App zum Zeichnen und Bewerten von Ziffern.
 
-## Einrichtung
-
-Installieren Sie die benoetigten Pakete:
+## Quick start
 
 ```bash
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## App starten
+## App starten (Tkinter-Demo)
 
 ```bash
-python app.py --app
+python app.py --app --model-path models/kaggle_mnist_full.npz
 ```
 
-Wenn kein Modell geladen ist, fragt die App nach einer `.npz`-Modelldatei.
+Die App lädt das Modell, zeigt eine 28×28-Zeichenfläche, Top-3-Vorhersagen, Wahrscheinlichkeitsdiagramme und Konfidenzmetriken. Das Modell kann durch einen anderen Pfad ersetzt werden.
 
-## Modellergebnisse
+## Ergebnisse & Modelle
 
-Die Modelldateien liegen in `models/`.
+Die Checkpoints liegen in `models/`. Die wichtigsten Dateien sind:
 
-| Modell | Trainiert auf Datensatz | Train acc | Val acc | Test acc | Kurze Notiz |
+| Modell | Datensatz | Epochs | Val Acc | Test Acc | Kommentar |
 | --- | --- | --- | --- | --- | --- |
-| `models/kaggle_mnist_full.npz` | `data/kaggle_mnist/mnist_png` (60k Train / 10k Test) | 0.9737 | 0.9697 | 0.9743 | Bestes Gesamtmodell. Sehr gute Standardwahl. |
-| `models/M4_pro_showcase_training.npz` | `data/kaggle_mnist/mnist_png` (gleicher Split/gleiche Einstellungen) | 0.9729 | 0.9722 | 0.9725 | Sehr nah am besten Modell. Im Showcase-Bild genutzt. |
-| `models/initial_model.npz` | Aelterer Reduced-MNIST-Workflow (im Stil von `data/Reduced_MNIST_Data`) | - | - | - | Aelteres Basis-Modell. Keine Metrics-Datei enthalten. |
+| `models/initial_model.npz` | `data/Reduced_MNIST_Data` (Originalsplit) | 80 | ~0.90 | ~0.91 | Baseline aus dem ursprünglichen Repo. Ideal für schnelle Tests. |
+| `models/fedora_chip_test_1.npz` | Reduced MNIST mit größerer Architektur & Augmentation | 72 | 0.925 | 0.941 | Tieferes Netz mit LR-Decay. Zeigt den Gewinn durch Augmentation. |
+| `models/fedora_chip_test_2.npz` | Same-folder training/testing auf `Reduced_Testing_data` | 52 | 0.900 | 0.874 | Demonstriert die Dataset-Obergrenze bei kleiner Datenmenge. |
+| `models/kaggle_mnist_full.npz` | `data/kaggle_mnist/mnist_png` (60k train, 10k test) | 75 | 0.9705 | 0.9736 | Aktuelles Topmodell mit PNG-fähigem Loader. Empfohlen für Production-Demos. |
 
-Zusatzinfos aus den Metrics-Dateien:
-- Netzwerkstruktur: `784 -> 256 -> 128 -> 64 -> 10`
-- Tiefe: 4 Schichten
-- Parameter: ca. 242,762
-- Geschaetzte Datensatz-Obergrenze: ca. 0.98
-- Datenaugmentation: aktiviert
+### Begleitdateien
 
-## So funktioniert das Training
+- `models/*.npz.metrics.npz` speichern `train_loss`, `val_acc`, `test_acc` und `learning_rate` pro Epoche.
+- `docs/models.md` beschreibt alle Checkpoints bzw. ihre Herkunft.
+- `docs/accuracy_summary.txt` (produziert von `scripts/plot_metrics.py`) zeigt eine Vergleichszusammenfassung.
 
-Der Trainingscode liegt in `train.py` und wird ueber `app.py`/`main.py` gestartet.
+## Automation & Reproduzierbarkeit
 
-Hauptschritte:
-- Mini-Batch-Training
-- Cross-Entropy-Loss + L2-Weight-Decay
-- Validierungs-Split + Early Stopping
-- schrittweiser Learning-Rate-Abfall
-- Datenaugmentation (kleine Verschiebungen, Helligkeit/Strichstaerke, leichtes Verdicken, Rauschen)
-- speichert Train/Val/Test-Metriken in jeder Epoche
-
-Beispiel fuer einen Trainingsbefehl:
+Die Build-Toolchain:
 
 ```bash
-python app.py --train --epochs 80 --batch-size 64 --learning-rate 0.005 --hidden-dims 256,128,64 --weight-decay 1e-4 --lr-decay-step 20 --lr-decay-factor 0.5 --patience 12 --model-path models/M4_pro_showcase_training.npz
+make install      # virtuelles Environment + Dependencies
+make train-kaggle # Trainingslauf auf dem Kaggle-Datensatz
+make test-loader  # Pflichttest für den Loader
+make plot-metrics # schreib die aktuellen Kennwerte nach docs/accuracy_summary.txt
 ```
 
-## Was die App anzeigt
+`tests/test_loader.py` überprüft die Shape-/One-hot-Annahmen des Loaders. `scripts/plot_metrics.py` erzeugt die Vergleichszusammenfassung für die Modelle.
 
-Wenn Sie `python app.py --app` starten, sehen Sie:
-- 28x28-Zeichenfeld
-- beste Vorhersage + Top-3-Vorhersagen
-- Wahrscheinlichkeitsdiagramm fuer die Ziffern 0 bis 9
-- verarbeitete 28x28-Vorschau des Inputs
-- Konfidenzwerte (Top-Score, Abstand Top-1 zu Top-2, Certainty-Score)
-- Konfidenzverlauf aus den letzten Vorhersagen
-- Buttons zum Laden eines Modells und zum Trainieren direkt in der App
-- zusaetzliche Trainings-Dashboards, falls eine `.metrics.npz` vorhanden ist
+## Projektstruktur
 
-## App-Showcase
+- `data/` enthält die reduzierten MNIST-Splits und den Kaggle-MNIST-Export.
+- `models/` speichert alle `.npz`-Checkpoints und deren Metriken.
+- `scripts/` enthält Hilfsskripts für Kennwert-Zusammenfassungen.
+- `docs/project-report.md` erzählt die Story, dokumentiert datasets/experiments und führt die Bewertungskriterien auf.
+- `tests/` enthält kleine Validierungs-Skripte.
 
-<img src="assets/media/app_show_case.png" alt="Digit-Predictor-App-Showcase" width="1200" />
+## Trainingsdetails
+
+Der Trainingscode sitzt in `main.py`/`train.py`. Standard-Lauf:
+
+```bash
+python main.py --train --epochs 80 --hidden-dims 256,128,64 --learning-rate 0.005 --lr-decay-step 20 --lr-decay-factor 0.5 --patience 12 --model-path models/kaggle_mnist_full.npz
+```
+
+- Mini-Batch-Training mit Cross-Entropy + L2 Weight Decay
+- Validierungs-Split + Early Stopping
+- Learning-Rate-Drops und einfache Augmentation (Shift, Helligkeit, Rauschen)
+
+## Datenerfassung & Monitoring
+
+- `scripts/export_all_tables.py` schreibt jede Postgres-Tabelle der `datacreation`-Pipeline nach `data/csv_exports/<table>_<YYYYMMDD>.csv`.
+- Der Deploy-Box-Status lässt sich mit `~/deploy-box/scripts/deploy-box-overview.sh` bzw. `db` abrufen.
+- Die Postgres-Tabellen (`price_data`, `price_data_10s_interval`, etc.) liefern die Markt-Timeseries.
 
 ## Demos
 
-Training-Demo:
+- <img src="assets/media/app_show_case.png" alt="App Showcase" width="1200" />
+- Trainings-Demo: `assets/media/training_model.gif`
+- Modellnutzungs-Demo: `assets/media/showing_model.gif`
 
-<img src="assets/media/training_model.gif" alt="Training-Demo" width="1200" />
+## Future work
 
-Modellnutzung-Demo:
-
-<img src="assets/media/showing_model.gif" alt="Modellnutzung-Demo" width="1200" />
+- Replizieren mit einem CNN oder einen kleinen Flask-API für Produktausgabe.
+- Verbindung zu den `datacreation`-Exports für eine RAG-gestützte Anomalie-Überwachung.
+- Weitere Dokumente im `docs/`-Verzeichnis (z. B. `docs/models.md`, `docs/project-report.md`).
