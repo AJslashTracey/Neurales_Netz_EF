@@ -33,7 +33,7 @@ Current default training uses:
 
 ## Command-line flags
 
-> The `docs/project-report.md` file captures the datasets, experiments, results, grading notes, and reproduction steps (run `make install && make train-kaggle`). The CSV summary `docs/figures/accuracy_summary.txt` lists the validation/test accuracy for each checkpoint after the latest training run.
+> The `docs/project-report.md` file captures the datasets, experiments, results, grading notes, and reproduction steps (run `make install && make train-kaggle`).
 
 ## Automation
 
@@ -43,10 +43,9 @@ The repository now ships with a `Makefile` covering the core tasks:
 make install      # set up virtualenv & install deps
 make train-kaggle # rebuild the best Kaggle MNIST model
 make test-loader  # run a quick shape check on the loader
-make plot-metrics # summarize the metrics into docs/figures/accuracy_summary.txt
 ```
 
-`tests/test_loader.py` verifies the flattening + one-hot encoding pipeline, while `scripts/plot_metrics.py` reexports the checkpoint metrics into `docs/figures/accuracy_summary.txt` for easy comparison.
+`tests/test_loader.py` verifies the flattening + one-hot encoding pipeline.
 
 ### Best model to date
 Run `python main.py` with the flags below to control its behavior:
