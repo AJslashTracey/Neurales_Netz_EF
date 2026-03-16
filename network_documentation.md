@@ -1,4 +1,4 @@
-# `network.py` Documentation
+# Personal notes: `network_documentation`
 
 This file defines a fully-connected feed-forward neural network in NumPy with:
 
