@@ -30,6 +30,11 @@ Current checkpoints are under `models/`:
 | `models/M4_pro_showcase_training.npz` | Same Kaggle split/config | 0.9729 | 0.9722 | 0.9725 | Showcase checkpoint used in the app screenshot. |
 | `models/initial_model.npz` | Legacy baseline checkpoint | - | - | - | Included for comparison; no `.metrics.npz` archive shipped for this one. |
 
+Dataset mapping per model:
+- `models/kaggle_mnist_full.npz`: trained on `data/kaggle_mnist/mnist_png` (PNG MNIST, 60k train + 10k test).
+- `models/M4_pro_showcase_training.npz`: trained on the same `data/kaggle_mnist/mnist_png` split/config.
+- `models/initial_model.npz`: historical baseline from the older reduced-MNIST workflow (`data/Reduced_MNIST_Data` style split).
+
 Training metadata in metrics archives estimates:
 - architecture depth: 4 layers (`784 -> 256 -> 128 -> 64 -> 10`)
 - parameter count: ~242,762
@@ -65,14 +70,14 @@ python app.py --train --epochs 80 --batch-size 64 --learning-rate 0.005 --hidden
 
 ## App showcase
 
-![Digit predictor app showcase](assets/media/app_show_case.png)
+<img src="assets/media/app_show_case.png" alt="Digit predictor app showcase" width="1200" />
 
 ## Demos
 
 Training demo:
 
-![Training demo](assets/media/training_model.gif)
+<img src="assets/media/training_model.gif" alt="Training demo" width="1200" />
 
 Model usage demo:
 
-![Model usage demo](assets/media/showing_model.gif)
+<img src="assets/media/showing_model.gif" alt="Model usage demo" width="1200" />
