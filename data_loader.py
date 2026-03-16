@@ -7,27 +7,36 @@ SUPPORTED_EXTENSIONS = (".jpg", ".jpeg", ".png")
 
 
 def load_images_from_folder(folder_path: str) -> tuple[np.ndarray, np.ndarray]:
+    # Collected as Python lists first, then converted to NumPy arrays at the end.
     images: list[np.ndarray] = []
     labels: list[int] = []
 
+    # Expect class subfolders named 0..9 under folder_path.
     for digit in range(10):
         digit_path = os.path.join(folder_path, str(digit))
+        # Keep deterministic file order and only process supported image types.
         files = sorted(
             f for f in os.listdir(digit_path) if f.lower().endswith(SUPPORTED_EXTENSIONS)
         )
         for filename in files:
+            # Read image and ensure consistent float dtype for downstream math.
             img = plt.imread(os.path.join(digit_path, filename))
             img = img.astype(np.float32)
+            print("Image:",img)
             if img.ndim == 3:
                 # Keep compatibility with possible RGB/RGBA inputs.
                 img = img[..., 0]
+            # If image is in 0-255 range, scale down to 0-1.
             max_val = float(np.max(img))
             if max_val > 1.0:
                 img = img / 255.0
+            # Clamp numeric noise and flatten from HxW to a 1D input vector.
             img = np.clip(img, 0.0, 1.0).flatten()
             images.append(img)
+            # Label comes from the digit folder name currently being read.
             labels.append(digit)
 
+    # X shape: (num_samples, num_pixels), y shape: (num_samples,)
     return np.array(images, dtype=np.float32), np.array(labels, dtype=np.int64)
 
 
