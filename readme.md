@@ -96,8 +96,14 @@ Für den größeren Kaggle-Run wird ein Apple-Silicon-Chip empfohlen. Auf andere
 ## Demos
 
 - <img src="assets/media/app_show_case.png" alt="App Showcase" width="1200" />
-- Trainings-Demo: `assets/media/training_model.gif`
-- Modellnutzungs-Demo: `assets/media/showing_model.gif`
+- Trainings-Demo:
+  <video width="1200" autoplay loop muted playsinline>
+    <source src="assets/media/training_model.gif" type="image/gif">
+  </video>
+- Modellnutzungs-Demo:
+  <video width="1200" autoplay loop muted playsinline>
+    <source src="assets/media/showing_model.gif" type="image/gif">
+  </video>
 
 ## Future work
 
