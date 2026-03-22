@@ -33,7 +33,12 @@ Die Checkpoints liegen in `models/`. Die wichtigsten Dateien sind:
 
 - `models/*.npz.metrics.npz` speichern `train_loss`, `val_acc`, `test_acc` und `learning_rate` pro Epoche.
 - `docs/models.md` beschreibt alle Checkpoints bzw. ihre Herkunft.
-- `docs/accuracy_summary.txt` (produziert von `scripts/plot_metrics.py`) zeigt eine Vergleichszusammenfassung.
+- `docs/accuracy_summary.txt` zeigt die aktuelle Vergleichszusammenfassung.
+- `docs/model_accuracy_comparison.png` visualisiert, wie gut die vorhandenen Modelle im direkten Vergleich sind.
+
+### Modellvergleich
+
+<img src="docs/model_accuracy_comparison.png" alt="Model accuracy comparison chart" width="1200" />
 
 ## Automation & Reproduzierbarkeit
 
@@ -43,10 +48,10 @@ Die Build-Toolchain:
 make install      # virtuelles Environment + Dependencies
 make train-kaggle # Trainingslauf auf dem Kaggle-Datensatz
 make test-loader  # Pflichttest für den Loader
-make plot-metrics # schreib die aktuellen Kennwerte nach docs/accuracy_summary.txt
+make plot-metrics # schreibe Summary + Vergleichsdiagramm nach docs/
 ```
 
-`tests/test_loader.py` überprüft die Shape-/One-hot-Annahmen des Loaders. `scripts/plot_metrics.py` erzeugt die Vergleichszusammenfassung für die Modelle.
+`tests/test_loader.py` überprüft die Shape-/One-hot-Annahmen des Loaders. `scripts/plot_metrics.py` erzeugt die Vergleichszusammenfassung und das Modellvergleichsdiagramm für die vorhandenen Metrics-Dateien.
 
 ## Projektstruktur
 
