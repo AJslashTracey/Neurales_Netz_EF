@@ -2,12 +2,25 @@ VENV := .venv
 PYTHON := $(VENV)/bin/python
 PIP := $(VENV)/bin/pip
 
-.PHONY: install train-kaggle test-loader plot-metrics clean
+.PHONY: install install-btop start-app train-kaggle test-loader plot-metrics clean
 
 install:
 	python -m venv $(VENV)
 	$(PIP) install --upgrade pip
 	$(PIP) install -r requirements.txt
+
+install-btop: ## Install btop with an available system package manager
+	@if command -v brew >/dev/null 2>&1; then \
+		brew install btop; \
+	elif command -v apt-get >/dev/null 2>&1; then \
+		sudo apt-get update && sudo apt-get install -y btop; \
+	else \
+		echo "No supported package manager found for installing btop."; \
+		exit 1; \
+	fi
+
+start-app: ## Start the Tkinter digit app
+	$(PYTHON) app.py --app --model-path models/kaggle_png_best.npz
 
 train-kaggle: ## Train the best Kaggle MNIST checkpoint
 	$(PYTHON) main.py --train \
